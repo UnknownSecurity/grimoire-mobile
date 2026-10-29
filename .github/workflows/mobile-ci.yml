@@ -1,0 +1,45 @@
+name: Mobile CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate mobile source
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Validate AIR and Ruffle contracts
+        shell: powershell
+        run: |
+          .\tests\Test-MobileAirShell.ps1
+          .\tests\Test-MobileRuffle.ps1
+
+      - name: Test and lint the Android workspace
+        shell: powershell
+        working-directory: mobile
+        run: .\gradlew.bat test :app:assembleDebug :app:lintDebug --no-daemon
+
+      - name: Check repository whitespace
+        shell: powershell
+        run: git diff --check

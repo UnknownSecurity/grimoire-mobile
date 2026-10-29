@@ -1,0 +1,180 @@
+diff --git a/render/canvas/src/lib.rs b/render/canvas/src/lib.rs
+index 11d5425c0..0abeef7d9 100644
+--- a/render/canvas/src/lib.rs
++++ b/render/canvas/src/lib.rs
+@@ -159,6 +159,14 @@ fn as_bitmap_data(handle: &BitmapHandle) -> &BitmapData {
+     <dyn Any>::downcast_ref(&*handle.0).expect("Bitmap handle must be a Canvas BitmapData")
+ }
+
++#[derive(Debug)]
++struct CanvasSyncHandle {
++    bitmap: BitmapHandle,
++    bounds: PixelRegion,
++}
++
++impl SyncHandle for CanvasSyncHandle {}
++
+ impl BitmapData {
+     /// Puts the image data into a newly created <canvas>, and caches it.
+     fn with_bitmap(bitmap: Bitmap) -> Result<Self, JsValue> {
+@@ -435,6 +443,47 @@ impl WebCanvasRenderBackend {
+         self.mask_state = MaskState::DrawContent;
+     }
+
++    fn render_to_bitmap(
++        &mut self,
++        handle: &BitmapHandle,
++        clear: Color,
++        commands: CommandList,
++    ) {
++        let (target_canvas, target_context) = {
++            let target = as_bitmap_data(handle);
++            (target.canvas.clone(), target.context.clone())
++        };
++
++        let stage_canvas = std::mem::replace(&mut self.canvas, target_canvas);
++        let stage_context = std::mem::replace(&mut self.context, target_context);
++        let stage_mask = std::mem::replace(&mut self.mask_state, MaskState::DrawContent);
++        let stage_blend_modes = std::mem::replace(
++            &mut self.blend_modes,
++            vec![RenderBlendMode::Builtin(BlendMode::Normal)],
++        );
++
++        self.context.save();
++        self.begin_frame(clear);
++        self.context.set_global_alpha(1.0);
++        self.context
++            .set_global_composite_operation("source-over")
++            .warn_on_error();
++        self.context.set_filter("none");
++        commands.execute(self);
++        self.context.restore();
++
++        self.canvas = stage_canvas;
++        self.context = stage_context;
++        self.mask_state = stage_mask;
++        self.blend_modes = stage_blend_modes;
++        self.apply_blend_mode(
++            self.blend_modes
++                .last()
++                .cloned()
++                .unwrap_or(RenderBlendMode::Builtin(BlendMode::Normal)),
++        );
++    }
++
+     fn push_blend_mode(&mut self, blend: RenderBlendMode) {
+         if !same_blend_mode(self.blend_modes.last(), &blend) {
+             self.apply_blend_mode(blend.clone());
+@@ -506,12 +555,21 @@ impl RenderBackend for WebCanvasRenderBackend {
+
+     fn render_offscreen(
+         &mut self,
+-        _handle: BitmapHandle,
+-        _commands: CommandList,
++        handle: BitmapHandle,
++        commands: CommandList,
+         _quality: StageQuality,
+-        _bounds: PixelRegion,
++        bounds: PixelRegion,
+     ) -> Option<Box<dyn SyncHandle>> {
+-        None
++        self.render_to_bitmap(&handle, Color::TRANSPARENT, commands);
++
++        Some(Box::new(CanvasSyncHandle {
++            bitmap: handle,
++            bounds,
++        }))
++    }
++
++    fn is_offscreen_supported(&self) -> bool {
++        true
+     }
+
+     fn submit_frame(
+@@ -520,8 +578,14 @@ impl RenderBackend for WebCanvasRenderBackend {
+         commands: CommandList,
+         cache_entries: Vec<BitmapCacheEntry>,
+     ) {
+-        if !cache_entries.is_empty() {
+-            panic!("Bitmap caching is unavailable on the canvas backend");
++        for entry in cache_entries {
++            if !entry.filters.is_empty() {
++                log::warn!(
++                    "Canvas bitmap caching ignores {} unsupported filter(s)",
++                    entry.filters.len()
++                );
++            }
++            self.render_to_bitmap(&entry.handle, entry.clear, entry.commands);
+         }
+         self.begin_frame(clear);
+         commands.execute(self);
+@@ -578,10 +642,24 @@ impl RenderBackend for WebCanvasRenderBackend {
+
+     fn resolve_sync_handle(
+         &mut self,
+-        _handle: Box<dyn SyncHandle>,
+-        _with_rgba: RgbaBufRead,
++        handle: Box<dyn SyncHandle>,
++        with_rgba: RgbaBufRead,
+     ) -> Result<(), Error> {
+-        Err(Error::Unimplemented("Sync handle resolution".into()))
++        let handle = Box::<dyn Any>::downcast::<CanvasSyncHandle>(handle)
++            .expect("Sync handle must be a CanvasSyncHandle");
++        let bitmap = as_bitmap_data(&handle.bitmap);
++        let image_data = bitmap
++            .context
++            .get_image_data(
++                handle.bounds.x_min as i32,
++                handle.bounds.y_min as i32,
++                handle.bounds.width() as i32,
++                handle.bounds.height() as i32,
++            )
++            .map_err(Error::JavascriptError)?;
++        let pixels = image_data.data().0;
++        with_rgba(&pixels, handle.bounds.width() * 4);
++        Ok(())
+     }
+
+     fn create_empty_texture(
+diff --git a/web/src/lib.rs b/web/src/lib.rs
+index 87d6f01..7ab5098 100644
+--- a/web/src/lib.rs
++++ b/web/src/lib.rs
+@@ -44,6 +44,16 @@ use web_sys::{
+ };
+
+ static RUFFLE_GLOBAL_PANIC: Once = Once::new();
++const MAXIMUM_RENDER_DEVICE_PIXEL_RATIO: f64 = 1.25;
++
++fn render_device_pixel_ratio(window: &Window) -> f64 {
++    let ratio = window.device_pixel_ratio();
++    if ratio.is_finite() {
++        ratio.clamp(1.0, MAXIMUM_RENDER_DEVICE_PIXEL_RATIO)
++    } else {
++        1.0
++    }
++}
+
+ new_key_type! {
+     /// An opaque handle to a `RuffleInstance` inside the pool.
+@@ -548,7 +558,7 @@ impl RuffleHandle {
+             canvas: player.canvas.clone(),
+             canvas_width: 0, // Initialize canvas width and height to 0 to force an initial canvas resize.
+             canvas_height: 0,
+-            device_pixel_ratio: window.device_pixel_ratio(),
++            device_pixel_ratio: render_device_pixel_ratio(&window),
+             window: window.clone(),
+             animation_handler: None,
+             animation_handler_id: None,
+@@ -1127,7 +1137,10 @@ impl RuffleHandle {
+             // Check for canvas resize.
+             let canvas_width = instance.canvas.client_width();
+             let canvas_height = instance.canvas.client_height();
+-            let device_pixel_ratio = instance.window.device_pixel_ratio(); // Changes via user zooming.
++            // Mobile WebViews commonly report ratios above 2.5. Rendering AQW's
++            // Canvas backend at that density multiplies every frame's pixel work
++            // without changing the game's 960x550 logical coordinate plane.
++            let device_pixel_ratio = render_device_pixel_ratio(&instance.window);
+             if instance.canvas_width != canvas_width
+                 || instance.canvas_height != canvas_height
+                 || (instance.device_pixel_ratio - device_pixel_ratio).abs() >= f64::EPSILON

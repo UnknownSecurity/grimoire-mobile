@@ -1,0 +1,39 @@
+{
+  "runtime": "Ruffle",
+  "version": "0.7.1",
+  "upstreamRepository": "https://github.com/ruffle-rs/ruffle.git",
+  "upstreamCommit": "89a7049965f3090e706265670df309a5128233ac",
+  "renderer": "canvas",
+  "maximumRenderDevicePixelRatio": 1.25,
+  "patch": "mobile/ruffle/patches/0001-canvas-bitmapdata-draw.patch",
+  "wasmBindgen": "0.2.127",
+  "binaryen": "version_129",
+  "binaryenArchiveSha256": "1405d2f51377859ccf5fcd2c59c0a8c5756373e691ca0eeb5219f646b743e3aa",
+  "files": [
+    {
+      "path": "mobile/app/src/main/assets/ruffle/core.ruffle.8b0acaf2b6de35352980.js",
+      "bytes": 108364,
+      "sha256": "8a2582723fffb1a5791455b978f2cc8686e2869afee84de1a41e7f1190a4989e"
+    },
+    {
+      "path": "mobile/app/src/main/assets/ruffle/e47974d6134697446b3c.wasm",
+      "bytes": 13312666,
+      "sha256": "c41f0381b13b0be0b48cbf90d84ac8f7a35ef99c0c397f57b2cf8d6caac22b0f"
+    },
+    {
+      "path": "mobile/app/src/main/assets/ruffle/LICENSE_APACHE",
+      "bytes": 9723,
+      "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+    },
+    {
+      "path": "mobile/app/src/main/assets/ruffle/LICENSE_MIT",
+      "bytes": 1097,
+      "sha256": "4de9338a7879c68e911742a7d691f0797ff1ef8d8a6fb978b0c711e258fe959c"
+    },
+    {
+      "path": "mobile/app/src/main/assets/ruffle/ruffle.js",
+      "bytes": 465643,
+      "sha256": "10ee9fcb490c540e78570bbace4638907d7218fba80a304021f1542d54efb388"
+    }
+  ]
+}

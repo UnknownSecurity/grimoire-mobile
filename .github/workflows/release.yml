@@ -1,0 +1,102 @@
+name: Mobile Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing or new release tag matching VERSION, for example v0.5.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build signed AIR APK
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      AIR_SDK_URL: "${{ secrets.AIR_SDK_URL }}"
+      AIR_SDK_SHA256: "${{ secrets.AIR_SDK_SHA256 }}"
+      ANDROID_KEYSTORE_BASE64: "${{ secrets.ANDROID_KEYSTORE_BASE64 }}"
+      ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+      GH_TOKEN: "${{ github.token }}"
+      RELEASE_TAG: "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Validate, build, and publish
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($required in @(
+            'AIR_SDK_URL',
+            'AIR_SDK_SHA256',
+            'ANDROID_KEYSTORE_BASE64',
+            'ANDROID_KEYSTORE_PASSWORD'
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($required))) {
+              throw "Required release secret is missing: $required"
+            }
+          }
+
+          $version = (Get-Content -LiteralPath '.\VERSION' -Raw).Trim()
+          $tag = $env:RELEASE_TAG
+          if ($tag -ne "v$version") {
+            throw "Tag $tag does not match VERSION $version."
+          }
+
+          .\tests\Test-MobileAirShell.ps1
+          $sdkArchive = Join-Path $env:RUNNER_TEMP 'air-sdk.zip'
+          $sdkExtract = Join-Path $env:RUNNER_TEMP 'air-sdk'
+          Invoke-WebRequest -Uri $env:AIR_SDK_URL -OutFile $sdkArchive
+          $actualHash = (Get-FileHash -LiteralPath $sdkArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:AIR_SDK_SHA256.Trim().ToLowerInvariant()) {
+            throw 'The HARMAN AIR SDK archive digest does not match AIR_SDK_SHA256.'
+          }
+          Expand-Archive -LiteralPath $sdkArchive -DestinationPath $sdkExtract
+          $adt = Get-ChildItem -LiteralPath $sdkExtract -Recurse -Filter 'adt.bat' -File |
+            Select-Object -First 1
+          if ($null -eq $adt) {
+            throw 'The verified HARMAN AIR SDK archive does not contain adt.bat.'
+          }
+          $env:AIR_HOME = Split-Path -Parent (Split-Path -Parent $adt.FullName)
+
+          $keystore = Join-Path $env:RUNNER_TEMP 'grimoire-mobile-release.p12'
+          [IO.File]::WriteAllBytes(
+            $keystore,
+            [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64)
+          )
+          $env:GRIMOIRE_ANDROID_KEYSTORE = $keystore
+          $env:GRIMOIRE_ANDROID_KEYSTORE_PASSWORD = $env:ANDROID_KEYSTORE_PASSWORD
+          .\mobile\build-android.ps1 -Configuration Release
+
+          $apk = ".\dist\Grimoire-Exodus-Android-AIR-$version-arm64.apk"
+          if (-not (Test-Path -LiteralPath $apk -PathType Leaf)) {
+            throw 'The signed AIR APK was not produced.'
+          }
+          $digest = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath "$apk.sha256" -Value "$digest  $([IO.Path]::GetFileName($apk))"
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $apk "$apk.sha256" --clobber
+          } else {
+            gh release create $tag $apk "$apk.sha256" --title "Grimoire Exodus Mobile $version" --generate-notes
+          }

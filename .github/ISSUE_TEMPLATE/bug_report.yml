@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible mobile client, overlay, or Bot Manager problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: checkboxes
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed usernames, passwords, private bot data, packet contents, and device identifiers.
+          required: true
+  - type: input
+    attributes:
+      label: Mobile version
+      placeholder: 0.5.0
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Engine
+      options:
+        - HARMAN AIR (default)
+        - Ruffle (experimental)
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Include concise reproduction steps and the expected result.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Device context
+      description: Android version and general device class only. Do not post identifiers or credentials.
+    validations:
+      required: true

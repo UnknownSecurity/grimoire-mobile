@@ -1,0 +1,10 @@
+* text=auto
+
+*.apk binary
+*.aab binary
+*.dll binary
+*.swf binary
+*.png binary
+*.ico binary
+
+*.html linguist-detectable=false

@@ -1,0 +1,410 @@
+{
+  "Set-MobileVersion.ps1": {
+    "mtime": 1793236905.197924,
+    "seen": 1793236956.8425531,
+    "ast_hash": "84b4360fc03cda8931893d0d43309076",
+    "semantic_hash": "84b4360fc03cda8931893d0d43309076"
+  },
+  "mobile/air-client/build-air.ps1": {
+    "mtime": 1793236906.066686,
+    "seen": 1793236956.8425612,
+    "ast_hash": "24128c4952a33a68508a40932e397595",
+    "semantic_hash": "24128c4952a33a68508a40932e397595"
+  },
+  "mobile/app/build.gradle.kts": {
+    "mtime": 1793236267.4041028,
+    "seen": 1793236956.842565,
+    "ast_hash": "a0c16a307fa36a126ef4816c11628fcf",
+    "semantic_hash": "a0c16a307fa36a126ef4816c11628fcf"
+  },
+  "mobile/app/src/main/assets/ruffle/core.ruffle.8b0acaf2b6de35352980.js": {
+    "mtime": 1793163143.0247529,
+    "seen": 1793236956.8425674,
+    "ast_hash": "4d6f9d8701edc214b1f5ea3a45e3f630",
+    "semantic_hash": "4d6f9d8701edc214b1f5ea3a45e3f630"
+  },
+  "mobile/app/src/main/assets/ruffle/ruffle.js": {
+    "mtime": 1793197578.0006773,
+    "seen": 1793236956.8425698,
+    "ast_hash": "dcc1b6a312fd3bc943adca66ab700737",
+    "semantic_hash": "dcc1b6a312fd3bc943adca66ab700737"
+  },
+  "mobile/app/src/main/kotlin/com/unknownsecurity/grimoireexodus/mobile/MainActivity.kt": {
+    "mtime": 1793195930.6671343,
+    "seen": 1793236956.8425715,
+    "ast_hash": "b35c4ab240a220835be36625579e9f92",
+    "semantic_hash": "b35c4ab240a220835be36625579e9f92"
+  },
+  "mobile/app/src/main/kotlin/com/unknownsecurity/grimoireexodus/mobile/ruffle/RuffleGameSurface.kt": {
+    "mtime": 1793068703.8211677,
+    "seen": 1793236956.8425734,
+    "ast_hash": "b265f96456ba262540b6a37b9ae09cf8",
+    "semantic_hash": "b265f96456ba262540b6a37b9ae09cf8"
+  },
+  "mobile/app/src/main/kotlin/com/unknownsecurity/grimoireexodus/mobile/ruffle/RuffleGameTransport.kt": {
+    "mtime": 1793199848.445027,
+    "seen": 1793236956.8425746,
+    "ast_hash": "49fd041b8c1ca4376762d19d84037d65",
+    "semantic_hash": "49fd041b8c1ca4376762d19d84037d65"
+  },
+  "mobile/app/src/main/kotlin/com/unknownsecurity/grimoireexodus/mobile/ruffle/RuffleLoopbackServer.kt": {
+    "mtime": 1793104250.2435856,
+    "seen": 1793236956.8425758,
+    "ast_hash": "639e26ae4ec35f1e6f4dd11b1d2520b7",
+    "semantic_hash": "639e26ae4ec35f1e6f4dd11b1d2520b7"
+  },
+  "mobile/app/src/main/kotlin/com/unknownsecurity/grimoireexodus/mobile/ruffle/RuffleServerMap.kt": {
+    "mtime": 1793068264.26475,
+    "seen": 1793236956.8425775,
+    "ast_hash": "20fb2949412fcf839ea539ecfe90ae6d",
+    "semantic_hash": "20fb2949412fcf839ea539ecfe90ae6d"
+  },
+  "mobile/app/src/main/kotlin/com/unknownsecurity/grimoireexodus/mobile/ui/GrimoireExodusApp.kt": {
+    "mtime": 1793199850.3047466,
+    "seen": 1793236956.8425786,
+    "ast_hash": "7706fc4261aafbb7810a245bb9db775e",
+    "semantic_hash": "7706fc4261aafbb7810a245bb9db775e"
+  },
+  "mobile/app/src/test/kotlin/com/unknownsecurity/grimoireexodus/mobile/ui/MobileNavigationStateTest.kt": {
+    "mtime": 1793082354.946623,
+    "seen": 1793236956.8425806,
+    "ast_hash": "914096449def41036686f9a4123d8b4a",
+    "semantic_hash": "914096449def41036686f9a4123d8b4a"
+  },
+  "mobile/build-android.ps1": {
+    "mtime": 1793199843.5838132,
+    "seen": 1793236956.8425815,
+    "ast_hash": "8fb29e74d620fdd90a9ae8a6bc493fef",
+    "semantic_hash": "8fb29e74d620fdd90a9ae8a6bc493fef"
+  },
+  "mobile/build-ruffle-client.ps1": {
+    "mtime": 1793104238.7802181,
+    "seen": 1793236956.8425827,
+    "ast_hash": "9bb71eb4678acddb47b411a21c5a2874",
+    "semantic_hash": "9bb71eb4678acddb47b411a21c5a2874"
+  },
+  "mobile/build-ruffle-runtime.ps1": {
+    "mtime": 1793196024.4020185,
+    "seen": 1793236956.8425841,
+    "ast_hash": "d0114864f137a785a78f21607b9713a7",
+    "semantic_hash": "d0114864f137a785a78f21607b9713a7"
+  },
+  "mobile/build.gradle.kts": {
+    "mtime": 1792129990.0317519,
+    "seen": 1793236956.8425853,
+    "ast_hash": "e52b062c1575a534788e9f213928055c",
+    "semantic_hash": "e52b062c1575a534788e9f213928055c"
+  },
+  "mobile/core/designsystem/build.gradle.kts": {
+    "mtime": 1792130719.5945756,
+    "seen": 1793236956.842587,
+    "ast_hash": "e1996d44cf1c1da5a1ad6b9c89e97eb6",
+    "semantic_hash": "e1996d44cf1c1da5a1ad6b9c89e97eb6"
+  },
+  "mobile/core/designsystem/src/main/kotlin/com/unknownsecurity/grimoireexodus/designsystem/ExodusTheme.kt": {
+    "mtime": 1793104267.3221033,
+    "seen": 1793236956.8425884,
+    "ast_hash": "6e6b8247dd3032dfd5b5eedbe07efa17",
+    "semantic_hash": "6e6b8247dd3032dfd5b5eedbe07efa17"
+  },
+  "mobile/core/domain/build.gradle.kts": {
+    "mtime": 1792130600.6996164,
+    "seen": 1793236956.8425896,
+    "ast_hash": "deddafee801ce7c0187862aadf700aac",
+    "semantic_hash": "deddafee801ce7c0187862aadf700aac"
+  },
+  "mobile/core/domain/src/main/kotlin/com/unknownsecurity/grimoireexodus/domain/GameTransport.kt": {
+    "mtime": 1792130063.0302658,
+    "seen": 1793236956.842591,
+    "ast_hash": "e49130d5fc45b92e98f633f2176e1f48",
+    "semantic_hash": "e49130d5fc45b92e98f633f2176e1f48"
+  },
+  "mobile/core/domain/src/main/kotlin/com/unknownsecurity/grimoireexodus/domain/OfflineGameTransport.kt": {
+    "mtime": 1792130063.5729299,
+    "seen": 1793236956.8425922,
+    "ast_hash": "e4532ca8fcb555e21a6762c0576b12de",
+    "semantic_hash": "e4532ca8fcb555e21a6762c0576b12de"
+  },
+  "mobile/core/domain/src/test/kotlin/com/unknownsecurity/grimoireexodus/domain/OfflineGameTransportTest.kt": {
+    "mtime": 1792130065.1348524,
+    "seen": 1793236956.8425932,
+    "ast_hash": "967075ed93b45214cd8c6bd944008b88",
+    "semantic_hash": "967075ed93b45214cd8c6bd944008b88"
+  },
+  "mobile/core/legacy-gbot/build.gradle.kts": {
+    "mtime": 1792130601.2270484,
+    "seen": 1793236956.8425953,
+    "ast_hash": "001b2983b0e7f663fe5f73eb4d882a7e",
+    "semantic_hash": "001b2983b0e7f663fe5f73eb4d882a7e"
+  },
+  "mobile/core/legacy-gbot/src/main/kotlin/com/unknownsecurity/grimoireexodus/legacygbot/LegacyGbotDocument.kt": {
+    "mtime": 1792130720.1162086,
+    "seen": 1793236956.8425965,
+    "ast_hash": "6bcc1512688e8f28f5c0995d3fd24cc3",
+    "semantic_hash": "6bcc1512688e8f28f5c0995d3fd24cc3"
+  },
+  "mobile/core/legacy-gbot/src/main/kotlin/com/unknownsecurity/grimoireexodus/legacygbot/LegacyGbotException.kt": {
+    "mtime": 1792130104.5640435,
+    "seen": 1793236956.8425977,
+    "ast_hash": "92d5f18734f678a4c937a2b09aa09465",
+    "semantic_hash": "92d5f18734f678a4c937a2b09aa09465"
+  },
+  "mobile/core/legacy-gbot/src/main/kotlin/com/unknownsecurity/grimoireexodus/legacygbot/LegacyGbotReader.kt": {
+    "mtime": 1793070200.320732,
+    "seen": 1793236956.842599,
+    "ast_hash": "29e04054aaf96598bc7edf43ea8af4e1",
+    "semantic_hash": "29e04054aaf96598bc7edf43ea8af4e1"
+  },
+  "mobile/core/legacy-gbot/src/test/kotlin/com/unknownsecurity/grimoireexodus/legacygbot/LegacyGbotReaderTest.kt": {
+    "mtime": 1793104397.7876976,
+    "seen": 1793236956.8426,
+    "ast_hash": "8a83f3273d9bd6716620bbcce31c3898",
+    "semantic_hash": "8a83f3273d9bd6716620bbcce31c3898"
+  },
+  "mobile/core/model/build.gradle.kts": {
+    "mtime": 1792131049.8828068,
+    "seen": 1793236956.8426015,
+    "ast_hash": "6f9aad11000d41e6c6b9eae85736c9ae",
+    "semantic_hash": "6f9aad11000d41e6c6b9eae85736c9ae"
+  },
+  "mobile/core/model/src/main/kotlin/com/unknownsecurity/grimoireexodus/model/BridgeHandshake.kt": {
+    "mtime": 1792132962.7847688,
+    "seen": 1793236956.8426027,
+    "ast_hash": "836a75c5d32c6689345c8e76252044c5",
+    "semantic_hash": "836a75c5d32c6689345c8e76252044c5"
+  },
+  "mobile/core/model/src/main/kotlin/com/unknownsecurity/grimoireexodus/model/BridgeModels.kt": {
+    "mtime": 1792130058.3245192,
+    "seen": 1793236956.8426037,
+    "ast_hash": "be621d5e3110d066b2585f1aadd7ce76",
+    "semantic_hash": "be621d5e3110d066b2585f1aadd7ce76"
+  },
+  "mobile/core/model/src/main/kotlin/com/unknownsecurity/grimoireexodus/model/MobileSessionSignal.kt": {
+    "mtime": 1793084351.6507757,
+    "seen": 1793236956.842605,
+    "ast_hash": "d6c0384f2aa6b3bb4558b6ecf1b8a359",
+    "semantic_hash": "d6c0384f2aa6b3bb4558b6ecf1b8a359"
+  },
+  "mobile/core/model/src/test/kotlin/com/unknownsecurity/grimoireexodus/model/BridgeContractTest.kt": {
+    "mtime": 1792131050.5212996,
+    "seen": 1793236956.8426063,
+    "ast_hash": "7288c8931421e3ee992beee7be0daf30",
+    "semantic_hash": "7288c8931421e3ee992beee7be0daf30"
+  },
+  "mobile/core/model/src/test/kotlin/com/unknownsecurity/grimoireexodus/model/BridgeHandshakeValidatorTest.kt": {
+    "mtime": 1792132963.2802904,
+    "seen": 1793236956.8426075,
+    "ast_hash": "2bb28462881abd9f32f97803e569844c",
+    "semantic_hash": "2bb28462881abd9f32f97803e569844c"
+  },
+  "mobile/core/model/src/test/kotlin/com/unknownsecurity/grimoireexodus/model/MobileSessionSignalTest.kt": {
+    "mtime": 1793084245.4608905,
+    "seen": 1793236956.8426087,
+    "ast_hash": "5e6c1a949264e431ec87f07b3fedbcd6",
+    "semantic_hash": "5e6c1a949264e431ec87f07b3fedbcd6"
+  },
+  "mobile/core/model/src/test/kotlin/com/unknownsecurity/grimoireexodus/model/TransportStatusTest.kt": {
+    "mtime": 1792130059.8890133,
+    "seen": 1793236956.84261,
+    "ast_hash": "8b7fce7ee93a79f75055bbd9074ea964",
+    "semantic_hash": "8b7fce7ee93a79f75055bbd9074ea964"
+  },
+  "mobile/gradlew": {
+    "mtime": 1792130512.372977,
+    "seen": 1793236956.8426113,
+    "ast_hash": "a43be8432bac3ffd05b3769aa42fe996",
+    "semantic_hash": "a43be8432bac3ffd05b3769aa42fe996"
+  },
+  "mobile/ruffle/runtime-manifest.json": {
+    "mtime": 1793197581.0936146,
+    "seen": 1793236956.8426125,
+    "ast_hash": "3d1d235b0ba20bcc9e705a33b68d3d91",
+    "semantic_hash": "3d1d235b0ba20bcc9e705a33b68d3d91"
+  },
+  "mobile/settings.gradle.kts": {
+    "mtime": 1792129989.4929242,
+    "seen": 1793236956.8426137,
+    "ast_hash": "20b6ddaf87c29abe797de69ae3f5d690",
+    "semantic_hash": "20b6ddaf87c29abe797de69ae3f5d690"
+  },
+  "shared/contracts/game-bridge/v1/bridge-handshake.schema.json": {
+    "mtime": 1792129997.7747028,
+    "seen": 1793236956.842615,
+    "ast_hash": "f74a43274aef652f3edb1ab12299b90e",
+    "semantic_hash": "f74a43274aef652f3edb1ab12299b90e"
+  },
+  "tests/Test-MobileAirShell.ps1": {
+    "mtime": 1793236273.0758846,
+    "seen": 1793236956.842616,
+    "ast_hash": "e9953db64b82fe91a7b930733cff7996",
+    "semantic_hash": "e9953db64b82fe91a7b930733cff7996"
+  },
+  "tests/Test-MobileRuffle.ps1": {
+    "mtime": 1793236274.509891,
+    "seen": 1793236956.842617,
+    "ast_hash": "5e1aaea0234b5627e83c406dc2da110e",
+    "semantic_hash": "5e1aaea0234b5627e83c406dc2da110e"
+  },
+  "tests/Test-MobileRuffleEmulator.ps1": {
+    "mtime": 1793199855.3389542,
+    "seen": 1793236956.8426187,
+    "ast_hash": "c8fe1e349f3fbedde4d2384f511fa5f7",
+    "semantic_hash": "c8fe1e349f3fbedde4d2384f511fa5f7"
+  },
+  "tests/Test-MobileRufflePerformance.ps1": {
+    "mtime": 1793199856.845592,
+    "seen": 1793236956.84262,
+    "ast_hash": "31b36ba118ef336dc840018c89ff20ac",
+    "semantic_hash": "31b36ba118ef336dc840018c89ff20ac"
+  },
+  ".github/ISSUE_TEMPLATE/bug_report.yml": {
+    "mtime": 1793236440.5217288,
+    "seen": 1793237545.3444438,
+    "ast_hash": "a72782281f8e853d8dff3edf9a6ce3c5",
+    "semantic_hash": ""
+  },
+  ".github/ISSUE_TEMPLATE/config.yml": {
+    "mtime": 1793236442.6070888,
+    "seen": 1793237545.3444467,
+    "ast_hash": "8757073b7baafd4a5c037142b36e4495",
+    "semantic_hash": ""
+  },
+  ".github/ISSUE_TEMPLATE/feature_request.yml": {
+    "mtime": 1793236441.5358977,
+    "seen": 1793237545.344449,
+    "ast_hash": "ad569f1a9e63155eff829c4e5fc4fc6b",
+    "semantic_hash": ""
+  },
+  ".github/PULL_REQUEST_TEMPLATE.md": {
+    "mtime": 1793236443.583823,
+    "seen": 1793237545.3444507,
+    "ast_hash": "15e0c79a48351b6146c5e8d4a7ea0886",
+    "semantic_hash": ""
+  },
+  ".github/workflows/mobile-ci.yml": {
+    "mtime": 1793236438.5566523,
+    "seen": 1793237545.344453,
+    "ast_hash": "8964e2c024a4216fa6a1a952e2e372de",
+    "semantic_hash": ""
+  },
+  ".github/workflows/release.yml": {
+    "mtime": 1793236857.604259,
+    "seen": 1793237545.3444548,
+    "ast_hash": "370f5456819e0e0f3f0ae7b9a2b0131f",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1793236338.7375648,
+    "seen": 1793237545.3444567,
+    "ast_hash": "ff70a731753d248da138ea0c839f9202",
+    "semantic_hash": ""
+  },
+  "CODE_OF_CONDUCT.md": {
+    "mtime": 1791955079.8083313,
+    "seen": 1793237545.3444586,
+    "ast_hash": "b4d0606855938b3e4d665305a6fb0496",
+    "semantic_hash": ""
+  },
+  "CONTRIBUTING.md": {
+    "mtime": 1793236361.0394385,
+    "seen": 1793237545.3444598,
+    "ast_hash": "387ba31f401e0f7cd3faf9b3ec6651c9",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1793236906.8563359,
+    "seen": 1793237545.3444612,
+    "ast_hash": "390478d1d2ea389fbe423143bd35da78",
+    "semantic_hash": ""
+  },
+  "SECURITY.md": {
+    "mtime": 1793236361.7495115,
+    "seen": 1793237545.3444626,
+    "ast_hash": "ac84bdd1d6b6347fe64ef1634ef74ffc",
+    "semantic_hash": ""
+  },
+  "app/Bot/README.md": {
+    "mtime": 1791964443.5326018,
+    "seen": 1793237545.344464,
+    "ast_hash": "0a93c562383a99017a2c7e726f4ec59e",
+    "semantic_hash": ""
+  },
+  "docs/android-port-plan.md": {
+    "mtime": 1793236271.4724996,
+    "seen": 1793237545.3444655,
+    "ast_hash": "9d9928a67c7433b9cf2c32711bbbf553",
+    "semantic_hash": ""
+  },
+  "mobile/README.md": {
+    "mtime": 1793236268.5876563,
+    "seen": 1793237545.344467,
+    "ast_hash": "b7c9635b37f50a56544ff185f2ce5260",
+    "semantic_hash": ""
+  },
+  "mobile/air-client/README.md": {
+    "mtime": 1793236269.8470082,
+    "seen": 1793237545.3444686,
+    "ast_hash": "f7275030b49f8af4359b2ec449e6f836",
+    "semantic_hash": ""
+  },
+  "mobile/app/src/main/assets/ruffle-host/index.html": {
+    "mtime": 1793196052.276874,
+    "seen": 1793237545.34447,
+    "ast_hash": "4f803725d795191914811614c8990a42",
+    "semantic_hash": ""
+  },
+  "mobile/ruffle/README.md": {
+    "mtime": 1793198615.7311418,
+    "seen": 1793237545.3444712,
+    "ast_hash": "bdd92284d28af78eeb6a1d9f4297e4b1",
+    "semantic_hash": ""
+  },
+  "shared/README.md": {
+    "mtime": 1792129994.212555,
+    "seen": 1793237545.344473,
+    "ast_hash": "9fffbd77d55343f37d543fa41e3b804b",
+    "semantic_hash": ""
+  },
+  "shared/contracts/README.md": {
+    "mtime": 1792129995.7172432,
+    "seen": 1793237545.344474,
+    "ast_hash": "ce3ef58dbd7af912060fc119bec5f6ce",
+    "semantic_hash": ""
+  },
+  "shared/contracts/game-bridge/v1/README.md": {
+    "mtime": 1792129997.2890315,
+    "seen": 1793237545.3444757,
+    "ast_hash": "63d2f644e545b714a7c1009046217d2f",
+    "semantic_hash": ""
+  },
+  "shared/contracts/gbot/v1/README.md": {
+    "mtime": 1792163837.5263343,
+    "seen": 1793237545.3444772,
+    "ast_hash": "cfbf6a7b1555882504f509c0a2d6c2d1",
+    "semantic_hash": ""
+  },
+  "mobile/air-client/assets/ciel_skill.png": {
+    "mtime": 1793064291.956756,
+    "seen": 1793237545.3444786,
+    "ast_hash": "155cf16f0e5267f9aa6adb51275d6718",
+    "semantic_hash": ""
+  },
+  "mobile/app/src/main/res/drawable-nodpi/ciel_skill.png": {
+    "mtime": 1793064291.956756,
+    "seen": 1793237545.34448,
+    "ast_hash": "155cf16f0e5267f9aa6adb51275d6718",
+    "semantic_hash": ""
+  },
+  "mobile/app/src/main/res/drawable-nodpi/grimoire_banner.png": {
+    "mtime": 1791942211.6804597,
+    "seen": 1793237545.3444815,
+    "ast_hash": "199d3daf752beb46089a647034586b1d",
+    "semantic_hash": ""
+  },
+  "mobile/app/src/main/res/drawable-nodpi/grimoire_emblem.png": {
+    "mtime": 1791942211.6736577,
+    "seen": 1793237545.344483,
+    "ast_hash": "635a02b3533f5f1e435b98cdaf5b5e6a",
+    "semantic_hash": ""
+  }
+}

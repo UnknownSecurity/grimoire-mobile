@@ -1,0 +1,29 @@
+# Build outputs and local tools
+.gradle/
+.idea/
+.tools/
+build/
+dist/
+local.properties
+*.apk
+*.aab
+*.p12
+*.keystore
+*.jks
+
+# Generated mobile artifacts
+mobile/air-client/build/
+mobile/app/build/
+mobile/build/
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/.graphify_analysis.json
+graphify-out/.graphify_labels.json
+graphify-out/.graphify_labels.json.sig
+graphify-out/.graphify_labels.pending.json
+graphify-out/.graphify_learning.json
+graphify-out/20??-??-??/
+graphify-out/cache/
+graphify-out/cost.json
+graphify-out/memory/
+graphify-out/reflections/

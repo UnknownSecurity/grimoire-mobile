@@ -1,13 +1,13 @@
 package grimoire
 {
+    import grimoire.nativebridge.AndroidDocumentPicker;
+
     import flash.events.Event;
     import flash.events.EventDispatcher;
     import flash.events.IOErrorEvent;
-    import flash.events.SecurityErrorEvent;
     import flash.filesystem.File;
     import flash.filesystem.FileMode;
     import flash.filesystem.FileStream;
-    import flash.net.FileReference;
     import flash.utils.ByteArray;
 
     /**
@@ -22,7 +22,7 @@ package grimoire
         public static const MAX_COMMANDS:int = 5000;
 
         private var items:Array = [];
-        private var picker:FileReference;
+        private var picker:AndroidDocumentPicker;
         private var currentIndex:int = -1;
         private var currentDocument:Object;
         private var currentStatus:String = "Select a bot to inspect it.";
@@ -117,20 +117,16 @@ package grimoire
             {
                 return;
             }
-            this.picker = new FileReference();
-            this.picker.addEventListener(Event.SELECT, this.onFileSelected);
-            this.picker.addEventListener(Event.CANCEL, this.onFileCancelled);
-            this.picker.addEventListener(Event.COMPLETE, this.onFileLoaded);
-            this.picker.addEventListener(IOErrorEvent.IO_ERROR, this.onImportError);
-            this.picker.addEventListener(SecurityErrorEvent.SECURITY_ERROR, this.onImportError);
             try
             {
-                // Android document providers do not consistently map custom
-                // .gbot extensions to a MIME type. An extension filter can
-                // therefore prevent the system picker from opening at all.
-                // Let the provider show its documents, then validate the name,
-                // byte limit, JSON shape, and command limit after selection.
-                this.picker.browse();
+                this.picker = new AndroidDocumentPicker();
+                this.picker.addEventListener(Event.SELECT, this.onFileSelected);
+                this.picker.addEventListener(Event.CANCEL, this.onFileCancelled);
+                this.picker.addEventListener(IOErrorEvent.IO_ERROR, this.onImportError);
+                if (!this.picker.browse())
+                {
+                    this.finishPicker("The Android document picker is already open.");
+                }
             }
             catch (error:Error)
             {
@@ -195,6 +191,87 @@ package grimoire
             this.refresh();
         }
 
+        public function saveEditedBot(document:Object, requestedName:String = null,
+            forceNewCopy:Boolean = false):Boolean
+        {
+            if (document == null)
+            {
+                this.currentStatus = "There is no edited bot to save.";
+                this.dispatchEvent(new Event(CHANGED));
+                return false;
+            }
+
+            try
+            {
+                var copy:Object = JSON.parse(JSON.stringify(document));
+                delete copy.mobileCommands;
+                var serialized:String = this.serializeLegacyJson(copy);
+                // Reuse the import validator before any bytes reach persistent
+                // storage. This keeps edited and imported bots on one contract.
+                this.parseDocument(serialized);
+
+                var bytes:ByteArray = new ByteArray();
+                bytes.writeUTFBytes(serialized);
+                if (bytes.length <= 0 || bytes.length > MAX_BOT_BYTES)
+                {
+                    throw new Error("This bot exceeds the safe mobile file limit.");
+                }
+
+                var folder:File = File.applicationStorageDirectory.resolvePath("Bots");
+                if (!folder.exists)
+                {
+                    folder.createDirectory();
+                }
+
+                var entry:Object = this.selectedEntry;
+                var destination:File;
+                var savedAsCopy:Boolean = forceNewCopy || entry == null || entry.community;
+                if (!savedAsCopy && File(entry.file).parent.url == folder.url)
+                {
+                    destination = entry.file as File;
+                }
+                else
+                {
+                    var baseName:String = requestedName;
+                    if (baseName == null || baseName.replace(/^\s+|\s+$/g, "").length == 0)
+                    {
+                        baseName = entry == null ? "Untitled Bot" : String(entry.name) + " Mobile";
+                    }
+                    destination = this.uniqueDestination(folder, this.safeFileName(baseName));
+                }
+
+                var temporary:File = folder.resolvePath("." + destination.name + ".tmp");
+                if (temporary.exists)
+                {
+                    temporary.deleteFile();
+                }
+                var stream:FileStream = new FileStream();
+                try
+                {
+                    stream.open(temporary, FileMode.WRITE);
+                    bytes.position = 0;
+                    stream.writeBytes(bytes, 0, bytes.length);
+                }
+                finally
+                {
+                    stream.close();
+                }
+                temporary.moveTo(destination, true);
+
+                this.currentStatus = savedAsCopy ? "Editable bot copy saved." : "Bot changes saved.";
+                this.refresh();
+                this.selectPath(destination.url, this.currentStatus);
+                return true;
+            }
+            catch (error:Error)
+            {
+                this.currentStatus = error.message == null || error.message.length == 0
+                    ? "The edited bot could not be saved." : error.message;
+                this.dispatchEvent(new Event(CHANGED));
+                return false;
+            }
+        }
+
         private function appendDirectory(target:Array, directory:File, community:Boolean):void
         {
             if (directory == null || !directory.exists || !directory.isDirectory)
@@ -235,6 +312,19 @@ package grimoire
             {
                 throw new Error("This bot exceeds the safe mobile file limit.");
             }
+            return this.parseDocument(this.readFileText(file));
+        }
+
+        private function readFileText(file:File):String
+        {
+            if (file == null || !file.exists || file.isDirectory)
+            {
+                throw new Error("The selected bot is no longer available.");
+            }
+            if (file.size <= 0 || file.size > MAX_BOT_BYTES)
+            {
+                throw new Error("This bot exceeds the safe mobile file limit.");
+            }
             var stream:FileStream = new FileStream();
             var raw:String;
             try
@@ -246,7 +336,7 @@ package grimoire
             {
                 stream.close();
             }
-            return this.parseDocument(raw);
+            return raw;
         }
 
         private function parseDocument(raw:String):Object
@@ -281,6 +371,87 @@ package grimoire
             return document;
         }
 
+        private function serializeLegacyJson(value:*, depth:int = 0):String
+        {
+            if (depth > 128)
+            {
+                throw new Error("This bot exceeds the safe JSON nesting limit.");
+            }
+            if (value === null)
+            {
+                return "null";
+            }
+            if (value is String)
+            {
+                return JSON.stringify(String(value));
+            }
+            if (value is Boolean)
+            {
+                return Boolean(value) ? "true" : "false";
+            }
+            if (value is Number || value is int || value is uint)
+            {
+                var number:Number = Number(value);
+                if (isNaN(number) || !isFinite(number))
+                {
+                    throw new Error("A bot property contains an invalid number.");
+                }
+                return String(number);
+            }
+            if (value is Array)
+            {
+                var parts:Array = [];
+                var array:Array = value as Array;
+                for each (var item:* in array)
+                {
+                    parts.push(this.serializeLegacyJson(item, depth + 1));
+                }
+                return "[" + parts.join(",") + "]";
+            }
+
+            var keys:Array = [];
+            for (var key:String in value)
+            {
+                if (key != "mobileCommands")
+                {
+                    keys.push(key);
+                }
+            }
+            keys.sort(this.compareLegacyJsonKeys);
+
+            var properties:Array = [];
+            for each (key in keys)
+            {
+                properties.push(JSON.stringify(key) + ":"
+                    + this.serializeLegacyJson(value[key], depth + 1));
+            }
+            return "{" + properties.join(",") + "}";
+        }
+
+        private function compareLegacyJsonKeys(left:Object, right:Object):Number
+        {
+            var leftKey:String = String(left);
+            var rightKey:String = String(right);
+            var leftRank:int = this.legacyMetadataRank(leftKey);
+            var rightRank:int = this.legacyMetadataRank(rightKey);
+            if (leftRank != rightRank)
+            {
+                return leftRank - rightRank;
+            }
+            leftKey = leftKey.toLowerCase();
+            rightKey = rightKey.toLowerCase();
+            return leftKey < rightKey ? -1 : (leftKey > rightKey ? 1 : 0);
+        }
+
+        private function legacyMetadataRank(key:String):int
+        {
+            if (key == "$type") return 0;
+            if (key == "$id") return 1;
+            if (key == "$ref") return 2;
+            if (key == "$values") return 3;
+            return 10;
+        }
+
         private function onFileSelected(event:Event):void
         {
             if (this.picker == null)
@@ -288,27 +459,13 @@ package grimoire
                 this.finishPicker("The Android document picker closed unexpectedly.");
                 return;
             }
-            this.currentStatus = "Importing bot...";
-            this.dispatchEvent(new Event(CHANGED));
-            this.picker.load();
-        }
-
-        private function onFileCancelled(event:Event):void
-        {
-            this.finishPicker("Import cancelled.");
-        }
-
-        private function onFileLoaded(event:Event):void
-        {
             try
             {
-                var bytes:ByteArray = this.picker.data;
-                if (bytes == null || bytes.length <= 0 || bytes.length > MAX_BOT_BYTES)
-                {
-                    throw new Error("This bot exceeds the safe mobile file limit.");
-                }
-                bytes.position = 0;
-                var raw:String = bytes.readUTFBytes(bytes.length);
+                this.currentStatus = "Importing bot...";
+                this.dispatchEvent(new Event(CHANGED));
+
+                var selectedFile:File = new File(this.picker.selectedPath);
+                var raw:String = this.readFileText(selectedFile);
                 this.parseDocument(raw);
 
                 var folder:File = File.applicationStorageDirectory.resolvePath("Bots");
@@ -316,7 +473,7 @@ package grimoire
                 {
                     folder.createDirectory();
                 }
-                var fileName:String = this.safeFileName(this.picker.name);
+                var fileName:String = this.safeFileName(this.picker.selectedName);
                 var destination:File = this.uniqueDestination(folder, fileName);
                 var stream:FileStream = new FileStream();
                 try
@@ -339,9 +496,16 @@ package grimoire
             }
         }
 
+        private function onFileCancelled(event:Event):void
+        {
+            this.finishPicker("Import cancelled.");
+        }
+
         private function onImportError(event:Event):void
         {
-            this.finishPicker("The selected bot could not be read.");
+            var ioError:IOErrorEvent = event as IOErrorEvent;
+            this.finishPicker(ioError == null || ioError.text.length == 0
+                ? "The selected bot could not be read." : ioError.text);
         }
 
         private function finishPicker(message:String):void
@@ -350,9 +514,8 @@ package grimoire
             {
                 this.picker.removeEventListener(Event.SELECT, this.onFileSelected);
                 this.picker.removeEventListener(Event.CANCEL, this.onFileCancelled);
-                this.picker.removeEventListener(Event.COMPLETE, this.onFileLoaded);
                 this.picker.removeEventListener(IOErrorEvent.IO_ERROR, this.onImportError);
-                this.picker.removeEventListener(SecurityErrorEvent.SECURITY_ERROR, this.onImportError);
+                this.picker.dispose();
                 this.picker = null;
             }
             this.currentStatus = message;

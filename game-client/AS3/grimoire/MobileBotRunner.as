@@ -4,8 +4,11 @@ package grimoire
     import flash.events.EventDispatcher;
     import flash.events.TimerEvent;
     import flash.utils.Timer;
+    import grimoire.game.Aura;
+    import grimoire.game.Bank;
     import grimoire.game.Network;
     import grimoire.game.DropStack;
+    import grimoire.game.House;
     import grimoire.game.Inventory;
     import grimoire.game.Player;
     import grimoire.game.Quest;
@@ -41,6 +44,16 @@ package grimoire
         private var botDelay:int = 500;
         private var packetSpamEnabled:Boolean;
         private var packetSpamPacket:String;
+        private var configuration:Object;
+        private var tempVariables:Object = {};
+        private var tempIntegers:Object = {};
+        private var skillSets:Object = {};
+        private var activeSkillSet:String;
+        private var skillCursor:int;
+        private var skillDelay:int = 250;
+        private var dropWhitelist:Array = [];
+        private var pickupEnabled:Boolean;
+        private var questList:Array = [];
 
         public function MobileBotRunner()
         {
@@ -91,6 +104,7 @@ package grimoire
                 return;
             }
             this.stopTimer();
+            this.configuration = document;
             this.commands = list.concat();
             // Older GBots commonly omit BotDelay or save it as zero. Keep a
             // small cooperative delay so AQW can finish target and asset state
@@ -98,6 +112,12 @@ package grimoire
             this.botDelay = document.BotDelay == null ? 500
                 : this.numberValue(document.BotDelay, 10, 60000);
             this.labels = {};
+            this.skillDelay = document.SkillDelay == null ? 250
+                : this.numberValue(document.SkillDelay, 10, 10000);
+            this.buildSkillSets(document.Skills);
+            this.loadConfigurationLists(document);
+            this.activeSkillSet = null;
+            this.skillCursor = 0;
             for (var labelIndex:int = 0; labelIndex < this.commands.length; labelIndex++)
             {
                 var labelCommand:Object = this.commands[labelIndex];
@@ -183,9 +203,14 @@ package grimoire
                 this.continueKill();
                 return;
             }
+            this.collectWhitelistedDrops();
+            if (this.maintainQuestList())
+            {
+                return;
+            }
             if (this.index >= this.commands.length)
             {
-                this.stop("BOT COMPLETED");
+                this.restartCommandLoop();
                 return;
             }
 
@@ -205,44 +230,44 @@ package grimoire
                         delay = this.botDelay;
                         break;
                     case "CmdJoin":
-                        Player.join(this.textValue(command.Map),
-                            this.textValue(command.Cell, "Enter"),
-                            this.textValue(command.Pad, "Spawn"));
+                        Player.join(this.resolveText(command.Map),
+                            this.resolveText(command.Cell, "Enter"),
+                            this.resolveText(command.Pad, "Spawn"));
                         delay = 1800;
                         break;
                     case "CmdJoin2":
-                        var map:String = this.textValue(command.Map);
-                        var room:String = this.textValue(command.Room);
+                        var map:String = this.resolveText(command.Map);
+                        var room:String = this.resolveText(command.Room);
                         Player.join(map + (room.length > 0 ? "-" + room : ""),
-                            this.textValue(command.Cell, "Enter"),
-                            this.textValue(command.Pad, "Spawn"));
+                            this.resolveText(command.Cell, "Enter"),
+                            this.resolveText(command.Pad, "Spawn"));
                         delay = 1800;
                         break;
                     case "CmdMoveToCell":
                     case "CmdJump":
-                        Player.jump(this.textValue(command.Cell, "Enter"),
-                            this.textValue(command.Pad, "Spawn"));
+                        Player.jump(this.resolveText(command.Cell, "Enter"),
+                            this.resolveText(command.Pad, "Spawn"));
                         delay = 350;
                         break;
                     case "CmdWalk":
-                        Player.walkToPoint(this.textValue(command.X), this.textValue(command.Y));
+                        Player.walkToPoint(this.resolveText(command.X), this.resolveText(command.Y));
                         delay = 200;
                         break;
                     case "CmdAttack":
-                        Player.attackMonster(this.textValue(command.Monster, "*"));
+                        Player.attackMonster(this.resolveText(command.Monster, "*"));
                         delay = 250;
                         break;
                     case "CmdKill":
-                        this.killTarget = this.textValue(command.Monster, "*");
+                        this.killTarget = this.resolveText(command.Monster, "*");
                         this.killForItem = null;
                         this.killEngaged = false;
                         this.waitingForKill = true;
                         this.continueKill();
                         return;
                     case "CmdKillFor":
-                        this.killTarget = this.textValue(command.Monster, "*");
-                        this.killForItem = this.textValue(command.ItemName);
-                        this.killForQuantity = this.numberValue(command.Quantity, 1, 999999);
+                        this.killTarget = this.resolveText(command.Monster, "*");
+                        this.killForItem = this.resolveText(command.ItemName);
+                        this.killForQuantity = this.numberValue(this.resolveValue(command.Quantity), 1, 999999);
                         this.killForTemporary = String(command.ItemType).toLowerCase().indexOf("temp") >= 0
                             || int(command.ItemType) != 0;
                         if (this.inventoryHas(this.killForItem, this.killForQuantity, this.killForTemporary))
@@ -256,8 +281,13 @@ package grimoire
                         return;
                     case "CmdUseSkill":
                     case "CmdUseSkill2":
-                        Skill.skillAction(this.textValue(command.Index, "1"));
+                        Skill.skillAction(this.resolveText(command.Index, "1"));
                         delay = 250;
+                        break;
+                    case "CmdSkillSet":
+                        this.activeSkillSet = this.resolveText(command.Name).toUpperCase();
+                        this.skillCursor = 0;
+                        delay = 1;
                         break;
                     case "CmdRest":
                         Player.rest();
@@ -271,18 +301,18 @@ package grimoire
                     case "CmdCompleteQuest":
                     case "CmdCompleteQuest2":
                         Quest.completeQuest(this.questId(command),
-                            this.textValue(command.ItemID, "-1"));
+                            this.resolveText(command.ItemID, "-1"));
                         delay = 750;
                         break;
                     case "CmdSetSpawn":
                         World.setSpawnPoint();
                         break;
                     case "CmdGetDrop":
-                        DropStack.getDrop(this.textValue(command.ItemName));
+                        DropStack.getDrop(this.resolveText(command.ItemName));
                         delay = 350;
                         break;
                     case "CmdEquip":
-                        var itemId:String = this.inventoryItemId(this.textValue(command.ItemName));
+                        var itemId:String = this.inventoryItemId(this.resolveText(command.ItemName));
                         if (itemId.length > 0)
                         {
                             Player.equipItem(itemId);
@@ -291,11 +321,67 @@ package grimoire
                         break;
                     case "CmdBuy":
                     case "CmdBuy2":
-                        Shop.buyItem(this.textValue(command.ItemName));
+                    case "CmdBuyFast":
+                        Shop.buyItem(this.resolveText(command.ItemName));
                         delay = 500;
                         break;
+                    case "CmdBuyByID":
+                    case "CmdBuyFastByID":
+                        Shop.buyItemByID(this.intValue(this.resolveValue(command.ItemID)),
+                            this.intValue(this.resolveValue(command.ShopID)),
+                            this.intValue(this.resolveValue(command.ShopItemID)),
+                            command.Manual === true);
+                        delay = 500;
+                        break;
+                    case "CmdLoad":
+                    case "CmdLoad2":
+                        Shop.load(this.resolveText(command.ShopId));
+                        delay = 800;
+                        break;
+                    case "CmdSell":
+                        Shop.sellItem(this.resolveText(command.ItemName));
+                        delay = 500;
+                        break;
+                    case "CmdBankTransfer":
+                        Bank.transfer(command.TransferFromBank === true ? "Inventory" : "Bank",
+                            this.resolveText(command.ItemName));
+                        delay = 700;
+                        break;
+                    case "CmdBankSwap":
+                        Bank.bankSwap(this.resolveText(command.InventoryItemName),
+                            this.resolveText(command.BankItemName));
+                        delay = 700;
+                        break;
+                    case "CmdMapItem":
+                    case "CmdMapItem2":
+                        Player.getMapItem(this.resolveText(command.ItemId != null
+                            ? command.ItemId : command.ItemID));
+                        delay = 1500;
+                        break;
+                    case "CmdUseBoost":
+                        var boostItem:Object = Inventory.getItem(this.resolveText(command.ItemName));
+                        if (boostItem != null && boostItem.ItemID != null)
+                        {
+                            Player.useBoost(String(boostItem.ItemID));
+                        }
+                        delay = 500;
+                        break;
+                    case "CmdLoadMapSwf":
+                        World.loadMap(this.resolveText(command.Name));
+                        delay = 1500;
+                        break;
+                    case "CmdChange":
+                        if (command.Guild === true)
+                        {
+                            Player.changeGuild(this.resolveText(command.Text));
+                        }
+                        else
+                        {
+                            Player.changeName(this.resolveText(command.Text));
+                        }
+                        break;
                     case "CmdGotoPlayer":
-                        Player.goTo(this.textValue(command.PlayerName));
+                        Player.goTo(this.resolveText(command.PlayerName));
                         delay = 1500;
                         break;
                     case "CmdCancelTarget":
@@ -307,6 +393,15 @@ package grimoire
                     case "CmdSetFPS":
                         Root.setFPS(this.numberValue(command.FPS, 20, 60));
                         break;
+                    case "CmdSetClientLevel":
+                        var levelCap:int = 100;
+                        if (Root.Game != null && Root.Game.intLevelCap != null)
+                        {
+                            levelCap = int(Root.Game.intLevelCap);
+                        }
+                        Root.sendClientPacket("{\"t\":\"xt\",\"b\":{\"r\":-1,\"o\":{\"cmd\":\"levelUp\",\"intExpToLevel\":\"0\",\"intLevel\":"
+                            + String(levelCap) + "}}}", "json");
+                        break;
                     case "CmdToggleProvoke":
                         if (int(command.Type) != 0)
                         {
@@ -314,11 +409,11 @@ package grimoire
                         }
                         break;
                     case "CmdClientMessage":
-                        Root.gameMessage(this.textValue(command.Messages));
+                        Root.gameMessage(this.resolveText(command.Messages));
                         break;
                     case "CmdPacket":
                     case "CmdPacket2":
-                        var preparedPacket:String = this.preparePacket(this.textValue(command.Packet));
+                        var preparedPacket:String = this.preparePacket(this.resolveText(command.Packet));
                         if (command.Client === true)
                         {
                             Root.sendClientPacket(preparedPacket, this.packetType(preparedPacket));
@@ -333,7 +428,7 @@ package grimoire
                         break;
                     case "CmdPacketlist2":
                         var packetMode:int = int(command.Type);
-                        this.packetSpamPacket = this.textValue(command.Packet);
+                        this.packetSpamPacket = this.resolveText(command.Packet);
                         this.packetTimer.delay = this.numberValue(command.Delay, 10, 60000);
                         this.packetSpamEnabled = packetMode == 0 ? false
                             : (packetMode == 1 ? true : !this.packetSpamEnabled);
@@ -352,6 +447,39 @@ package grimoire
                         break;
                     case "CmdRestart":
                         this.index = 0;
+                        break;
+                    case "CmdClearTemp":
+                        this.tempVariables = {};
+                        this.tempIntegers = {};
+                        break;
+                    case "CmdSetVar":
+                        this.tempVariables[this.textValue(command.Value1)] =
+                            this.textValue(command.Value2);
+                        break;
+                    case "CmdUpdateVar":
+                        var updateKey:String = this.textValue(command.Value1);
+                        if (this.tempVariables.hasOwnProperty(updateKey))
+                        {
+                            this.tempVariables[updateKey] = this.textValue(command.Value2);
+                        }
+                        else
+                        {
+                            this.index++;
+                        }
+                        break;
+                    case "CmdGetClassWithVar":
+                        this.tempVariables[this.textValue(command.Value1)] =
+                            this.gameString(Player.className());
+                        break;
+                    case "CmdInt":
+                        this.executeIntegerCommand(command);
+                        break;
+                    case "CmdWhitelist":
+                        this.executeWhitelistCommand(command);
+                        break;
+                    case "CmdQuestlist":
+                        this.executeQuestListCommand(command);
+                        delay = 750;
                         break;
                     case "CmdGotoLabel":
                         var targetLabel:String = this.textValue(command.Label).toLowerCase();
@@ -387,6 +515,8 @@ package grimoire
                     case "CmdBlank3":
                     case "CmdLabel":
                     case "CmdLog":
+                    case "CmdBankList":
+                    case "CmdFollow":
                         break;
                     default:
                         if (this.executeStatement(kind, command))
@@ -415,11 +545,14 @@ package grimoire
                 if (Player.hasTarget() == Root.trueString)
                 {
                     this.killEngaged = true;
-                    for (var skill:int = 1; skill <= 4; skill++)
+                    if (!this.useConfiguredSkill())
                     {
-                        Skill.skillAction(String(skill));
+                        for (var skill:int = 1; skill <= 4; skill++)
+                        {
+                            Skill.skillAction(String(skill));
+                        }
                     }
-                    this.schedule(500);
+                    this.schedule(this.activeSkillSet == null ? 500 : this.skillDelay);
                     return;
                 }
                 if (!this.killEngaged && World.isMonsterAvailable(this.killTarget) == Root.trueString)
@@ -447,6 +580,251 @@ package grimoire
             this.killTarget = null;
             this.killForItem = null;
             this.schedule(120);
+        }
+
+        private function restartCommandLoop():void
+        {
+            this.index = 0;
+            this.setStatus("BOT RUNNING");
+            this.schedule(Math.max(1, this.botDelay));
+        }
+
+        private function buildSkillSets(raw:*):void
+        {
+            this.skillSets = {};
+            var skills:Array = this.listValues(raw);
+            var current:Array = [];
+            this.skillSets[""] = current;
+            for each (var skill:Object in skills)
+            {
+                if (skill == null)
+                {
+                    continue;
+                }
+                var typeText:String = String(skill.Type).toLowerCase();
+                var isLabel:Boolean = int(skill.Type) == 2 || typeText.indexOf("label") >= 0;
+                if (isLabel)
+                {
+                    var label:String = this.textValue(skill.Text).replace(/^\[|\]$/g, "").toUpperCase();
+                    current = [];
+                    this.skillSets[label] = current;
+                }
+                else
+                {
+                    current.push(skill);
+                }
+            }
+        }
+
+        private function useConfiguredSkill():Boolean
+        {
+            if (this.activeSkillSet == null)
+            {
+                return false;
+            }
+            var skills:Array = this.skillSets[this.activeSkillSet] as Array;
+            if (skills == null || skills.length == 0)
+            {
+                return false;
+            }
+            if (this.skillCursor >= skills.length)
+            {
+                this.skillCursor = 0;
+            }
+            var skill:Object = skills[this.skillCursor++];
+            var shouldUse:Boolean = true;
+            var typeText:String = String(skill.Type).toLowerCase();
+            if (int(skill.Type) == 1 || typeText.indexOf("safe") >= 0)
+            {
+                var threshold:Number = Number(skill.SafePercentage);
+                var actual:Number = threshold;
+                if (skill.SafeHp === true)
+                {
+                    actual = this.percentage(Player.health(), Player.maxHealth());
+                }
+                else if (skill.SafeMp === true)
+                {
+                    actual = this.percentage(Player.mana(), Player.maxMana());
+                }
+                shouldUse = skill.ComparisonType === true
+                    ? actual >= threshold : actual <= threshold;
+            }
+            if (shouldUse)
+            {
+                Skill.skillAction(this.textValue(skill.Index, "1"));
+            }
+            return true;
+        }
+
+        private function loadConfigurationLists(document:Object):void
+        {
+            this.dropWhitelist = [];
+            this.pickupEnabled = document != null && document.EnablePickup === true;
+            var rawDrops:Array = this.listValues(document == null ? null : document.Drops);
+            for each (var rawDrop:* in rawDrops)
+            {
+                this.addUniqueText(this.dropWhitelist, this.textValue(rawDrop));
+            }
+
+            this.questList = [];
+            var rawQuests:Array = this.listValues(document == null ? null : document.Quests);
+            var questIds:Array = [];
+            for each (var rawQuest:Object in rawQuests)
+            {
+                if (rawQuest == null)
+                {
+                    continue;
+                }
+                var id:String = this.textValue(rawQuest.Id != null
+                    ? rawQuest.Id : rawQuest.QuestID);
+                if (id.length == 0)
+                {
+                    continue;
+                }
+                this.questList.push({ id: id, itemId: this.textValue(rawQuest.ItemId, "-1") });
+                questIds.push(id);
+            }
+            if (questIds.length > 0)
+            {
+                Quest.loadMultipleQuests(questIds.join(","));
+            }
+        }
+
+        private function executeWhitelistCommand(command:Object):void
+        {
+            var rawState:* = command.State;
+            var stateText:String = String(rawState).toLowerCase();
+            if (stateText == "0" || stateText == "on")
+            {
+                this.pickupEnabled = true;
+            }
+            else if (stateText == "1" || stateText == "off")
+            {
+                this.pickupEnabled = false;
+            }
+            else if (stateText == "2" || stateText == "clear")
+            {
+                this.dropWhitelist = [];
+            }
+            else if (stateText == "3" || stateText == "add")
+            {
+                this.addUniqueText(this.dropWhitelist, this.resolveText(command.Item));
+            }
+            else if (stateText == "4" || stateText == "remove")
+            {
+                this.removeText(this.dropWhitelist, this.resolveText(command.Item));
+            }
+        }
+
+        private function executeQuestListCommand(command:Object):void
+        {
+            var rawState:* = command.state;
+            var stateText:String = String(rawState).toLowerCase();
+            var id:String = this.resolveText(command.QuestID);
+            var itemId:String = this.resolveText(command.ItemID, "-1");
+            if (stateText == "0" || stateText == "add")
+            {
+                this.removeQuest(id, itemId);
+                this.questList.push({ id: id, itemId: itemId });
+                Quest.loadQuest(id);
+                Quest.acceptQuest(id);
+            }
+            else if (stateText == "1" || stateText == "remove")
+            {
+                this.removeQuest(id, itemId);
+            }
+            else if (stateText == "2" || stateText == "clear")
+            {
+                this.questList = [];
+            }
+        }
+
+        private function maintainQuestList():Boolean
+        {
+            for each (var quest:Object in this.questList)
+            {
+                try
+                {
+                    if (this.isTrue(Quest.canComplete(String(quest.id))))
+                    {
+                        Quest.completeQuest(String(quest.id), this.textValue(quest.itemId, "-1"));
+                        this.schedule(750);
+                        return true;
+                    }
+                    if (!this.isTrue(Quest.isInProgress(String(quest.id)))
+                        && this.isTrue(Quest.isAvailable(String(quest.id))))
+                    {
+                        Quest.acceptQuest(String(quest.id));
+                        this.schedule(750);
+                        return true;
+                    }
+                }
+                catch (error:Error)
+                {
+                    // The quest may still be loading. The command loop retries
+                    // without stopping or skipping unrelated legacy commands.
+                }
+            }
+            return false;
+        }
+
+        private function collectWhitelistedDrops():void
+        {
+            if (!this.pickupEnabled)
+            {
+                return;
+            }
+            for each (var rawName:* in this.dropWhitelist)
+            {
+                var name:String = this.resolveText(rawName);
+                if (name.length > 0 && this.isTrue(DropStack.hasDrop(name)))
+                {
+                    DropStack.getDrop(name);
+                }
+            }
+        }
+
+        private function addUniqueText(values:Array, value:String):void
+        {
+            if (value == null || value.length == 0)
+            {
+                return;
+            }
+            for each (var existing:* in values)
+            {
+                if (String(existing).toLowerCase() == value.toLowerCase())
+                {
+                    return;
+                }
+            }
+            if (values.length < 256)
+            {
+                values.push(value);
+            }
+        }
+
+        private function removeText(values:Array, value:String):void
+        {
+            for (var i:int = values.length - 1; i >= 0; i--)
+            {
+                if (String(values[i]).toLowerCase() == value.toLowerCase())
+                {
+                    values.splice(i, 1);
+                }
+            }
+        }
+
+        private function removeQuest(id:String, itemId:String):void
+        {
+            for (var i:int = this.questList.length - 1; i >= 0; i--)
+            {
+                var quest:Object = this.questList[i];
+                if (String(quest.id) == id && (itemId.length == 0
+                    || String(quest.itemId) == itemId))
+                {
+                    this.questList.splice(i, 1);
+                }
+            }
         }
 
         private function onPacketTimer(event:TimerEvent):void
@@ -512,8 +890,8 @@ package grimoire
         private function executeStatement(kind:String, command:Object):Boolean
         {
             var condition:Boolean;
-            var value1:String = this.textValue(command.Value1);
-            var value2:String = this.textValue(command.Value2);
+            var value1:String = this.resolveText(command.Value1);
+            var value2:String = this.resolveText(command.Value2);
             switch (kind)
             {
                 case "CmdInInventory":
@@ -627,6 +1005,165 @@ package grimoire
                 case "CmdFactionRankLessThan":
                     condition = this.factionRank(value1) < this.intValue(value2);
                     break;
+                case "CmdEquipped":
+                    condition = this.isEquipped(value1);
+                    break;
+                case "CmdNotEquipped":
+                    condition = !this.isEquipped(value1);
+                    break;
+                case "CmdInBank":
+                    condition = this.itemHasQuantity(Bank.getItem(value1), this.quantityValue(value2));
+                    break;
+                case "CmdNotInBank":
+                    condition = !this.itemHasQuantity(Bank.getItem(value1), this.quantityValue(value2));
+                    break;
+                case "CmdInHouse":
+                    condition = this.itemHasQuantity(House.getItem(value1), this.quantityValue(value2));
+                    break;
+                case "CmdNotInHouse":
+                    condition = !this.itemHasQuantity(House.getItem(value1), this.quantityValue(value2));
+                    break;
+                case "CmdItemPickupable":
+                    condition = this.isTrue(DropStack.hasDrop(value1));
+                    break;
+                case "CmdItemNotPickupable":
+                    condition = !this.isTrue(DropStack.hasDrop(value1));
+                    break;
+                case "CmdListInInv":
+                    condition = this.allConfiguredItemsInInventory();
+                    break;
+                case "CmdIntIs":
+                    condition = this.integerValue(value1) == this.intValue(value2);
+                    break;
+                case "CmdIntIsNot":
+                    condition = this.integerValue(value1) != this.intValue(value2);
+                    break;
+                case "CmdIntGreaterThan":
+                    condition = this.integerValue(value1) > this.intValue(value2);
+                    break;
+                case "CmdIntLessThan":
+                    condition = this.integerValue(value1) < this.intValue(value2);
+                    break;
+                case "CmdIntEqualInt":
+                    condition = this.integerValue(value1) == this.integerValue(value2);
+                    break;
+                case "CmdIntNotEqualInt":
+                    condition = this.integerValue(value1) != this.integerValue(value2);
+                    break;
+                case "CmdAvailableMonstersGreaterThan":
+                    condition = this.monsterCount(false) > this.intValue(value1);
+                    break;
+                case "CmdAvailableMonstersLessThan":
+                    condition = this.monsterCount(false) < this.intValue(value1);
+                    break;
+                case "CmdVisibleMonstersGreaterThan":
+                    condition = this.monsterCount(true) > this.intValue(value1);
+                    break;
+                case "CmdVisibleMonstersLessThan":
+                    condition = this.monsterCount(true) < this.intValue(value1);
+                    break;
+                case "CmdMonsterHealthGreaterThan":
+                    condition = World.monsterHealth(value1) > this.intValue(value2);
+                    break;
+                case "CmdMonsterHealthLessThan":
+                    condition = World.monsterHealth(value1) < this.intValue(value2);
+                    break;
+                case "CmdPlayersGreaterThan":
+                    condition = this.playerCount(null) > this.intValue(value1);
+                    break;
+                case "CmdPlayersLessThan":
+                    condition = this.playerCount(null) < this.intValue(value1);
+                    break;
+                case "CmdPlayersInCellGreaterThan":
+                    condition = this.playerCount(value1) > this.intValue(value2);
+                    break;
+                case "CmdPlayersInCellLessThan":
+                    condition = this.playerCount(value1) < this.intValue(value2);
+                    break;
+                case "CmdPlayersInMyCellGreaterThan":
+                    condition = this.playerCount(this.gameString(Player.cell())) > this.intValue(value1);
+                    break;
+                case "CmdPlayersInMyCellLessThan":
+                    condition = this.playerCount(this.gameString(Player.cell())) < this.intValue(value1);
+                    break;
+                case "CmdPlayerInRoom":
+                    condition = this.findPlayer(value1, null) != null;
+                    break;
+                case "CmdPlayerNotInRoom":
+                    condition = this.findPlayer(value1, null) == null;
+                    break;
+                case "CmdPlayerIsInCell":
+                    condition = this.findPlayer(value1, value2) != null;
+                    break;
+                case "CmdPlayerIsNotInCell":
+                    condition = this.findPlayer(value1, value2) == null;
+                    break;
+                case "CmdPlayerIsInMyCell":
+                    condition = this.findPlayer(value1, this.gameString(Player.cell())) != null;
+                    break;
+                case "CmdPlayerIsNotInMyCell":
+                    condition = this.findPlayer(value1, this.gameString(Player.cell())) == null;
+                    break;
+                case "CmdPlayerInCombat":
+                    condition = this.isTrue(World.isPlayerInCombat(value1));
+                    break;
+                case "CmdPlayerNotInCombat":
+                    condition = !this.isTrue(World.isPlayerInCombat(value1));
+                    break;
+                case "CmdPlayerEquippedClass":
+                    condition = this.isTrue(World.isPlayerWithClass(value1, value2));
+                    break;
+                case "CmdPlayerNotEquippedClass":
+                    condition = !this.isTrue(World.isPlayerWithClass(value1, value2));
+                    break;
+                case "CmdPlayerAuraIsActive":
+                    condition = this.auraActive("Self", value1);
+                    break;
+                case "CmdPlayerAuraIsNotActive":
+                    condition = !this.auraActive("Self", value1);
+                    break;
+                case "CmdTargetAuraIsActive":
+                    condition = this.auraActive("Target", value1);
+                    break;
+                case "CmdTargetAuraIsNotActive":
+                    condition = !this.auraActive("Target", value1);
+                    break;
+                case "CmdPlayerAuraStringValIs":
+                    condition = this.auraStringValue("Self", value1, value2);
+                    break;
+                case "CmdPlayerAuraStringValIsNot":
+                    condition = !this.auraStringValue("Self", value1, value2);
+                    break;
+                case "CmdTargetAuraStringValIs":
+                    condition = this.auraStringValue("Target", value1, value2);
+                    break;
+                case "CmdTargetAuraStringValIsNot":
+                    condition = !this.auraStringValue("Target", value1, value2);
+                    break;
+                case "CmdPlayerAuraValIs":
+                    condition = this.auraNumberValue("Self", "Equal", value1, this.intValue(value2));
+                    break;
+                case "CmdPlayerAuraValIsNot":
+                    condition = !this.auraNumberValue("Self", "Equal", value1, this.intValue(value2));
+                    break;
+                case "CmdPlayerAuraValIsGreaterThan":
+                    condition = this.auraNumberValue("Self", "Greater", value1, this.intValue(value2));
+                    break;
+                case "CmdPlayerAuraValIsLessThan":
+                    condition = this.auraNumberValue("Self", "Less", value1, this.intValue(value2));
+                    break;
+                case "CmdTargetAuraValIs":
+                    condition = this.auraNumberValue("Target", "Equal", value1, this.intValue(value2));
+                    break;
+                case "CmdTargetAuraValIsNot":
+                    condition = !this.auraNumberValue("Target", "Equal", value1, this.intValue(value2));
+                    break;
+                case "CmdTargetAuraValIsGreaterThan":
+                    condition = this.auraNumberValue("Target", "Greater", value1, this.intValue(value2));
+                    break;
+                case "CmdTargetAuraValIsLessThan":
+                    condition = this.auraNumberValue("Target", "Less", value1, this.intValue(value2));
+                    break;
                 default:
                     return false;
             }
@@ -637,6 +1174,206 @@ package grimoire
                 this.index++;
             }
             return true;
+        }
+
+        private function executeIntegerCommand(command:Object):void
+        {
+            var key:String = this.textValue(command.Int);
+            var typeText:String = String(command.type).toLowerCase();
+            if (typeText == "0" || typeText.indexOf("set") >= 0)
+            {
+                this.tempIntegers[key] = this.intValue(command.Value);
+            }
+            else
+            {
+                var current:int = this.tempIntegers.hasOwnProperty(key)
+                    ? int(this.tempIntegers[key]) : 0;
+                this.tempIntegers[key] = typeText == "1" || typeText.indexOf("upper") >= 0
+                    ? current + 1 : current - 1;
+            }
+        }
+
+        private function resolveValue(value:*):*
+        {
+            if (value == null)
+            {
+                return value;
+            }
+            var text:String = String(value);
+            if (text.length >= 2 && text.charAt(0) == "["
+                && text.charAt(text.length - 1) == "]")
+            {
+                var key:String = text.substring(1, text.length - 1).split("'").join("");
+                if (this.tempVariables.hasOwnProperty(key))
+                {
+                    return this.tempVariables[key];
+                }
+            }
+            return value;
+        }
+
+        private function resolveText(value:*, fallback:String = ""):String
+        {
+            var resolved:* = this.resolveValue(value);
+            return resolved == null ? fallback : String(resolved);
+        }
+
+        private function listValues(value:*):Array
+        {
+            if (value is Array)
+            {
+                return value as Array;
+            }
+            if (value != null && value["$values"] is Array)
+            {
+                return value["$values"] as Array;
+            }
+            return [];
+        }
+
+        private function integerValue(key:String):int
+        {
+            return this.tempIntegers.hasOwnProperty(key) ? int(this.tempIntegers[key]) : 0;
+        }
+
+        private function itemHasQuantity(item:Object, quantity:int):Boolean
+        {
+            if (item == null)
+            {
+                return false;
+            }
+            var raw:* = item.iQty != null ? item.iQty
+                : (item.Quantity != null ? item.Quantity : 1);
+            return int(raw) >= quantity;
+        }
+
+        private function isEquipped(name:String):Boolean
+        {
+            var item:Object = Inventory.getItem(name);
+            return item != null && (item.bEquip === true || int(item.bEquip) == 1
+                || item.IsEquipped === true || int(item.IsEquipped) == 1);
+        }
+
+        private function allConfiguredItemsInInventory():Boolean
+        {
+            var items:Array = this.listValues(this.configuration == null
+                ? null : this.configuration.Items);
+            for each (var value:* in items)
+            {
+                var name:String = value is String ? String(value)
+                    : this.textValue(value == null ? null : value.Name);
+                if (name.length > 0 && !this.inventoryHas(this.resolveText(name), 1, false))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private function monsterCount(visibleOnly:Boolean):int
+        {
+            var monsters:Array = this.jsonArray(visibleOnly
+                ? World.getVisibleMonstersInCell() : World.getMonstersInCell());
+            var count:int;
+            for each (var monster:Object in monsters)
+            {
+                if (monster != null && (monster.intState == null || int(monster.intState) > 0))
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private function playerCount(cell:String):int
+        {
+            var players:Array = this.jsonArray(World.avatarsInMap());
+            if (cell == null || cell.length == 0)
+            {
+                return players.length;
+            }
+            var count:int;
+            for each (var player:Object in players)
+            {
+                if (player != null && player.strFrame != null
+                    && String(player.strFrame).toLowerCase() == cell.toLowerCase())
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private function findPlayer(name:String, cell:String):Object
+        {
+            var players:Array = this.jsonArray(World.avatarsInMap());
+            for each (var player:Object in players)
+            {
+                if (player == null)
+                {
+                    continue;
+                }
+                var playerName:String = player.strUsername != null
+                    ? String(player.strUsername) : this.textValue(player.uoName);
+                if (playerName.toLowerCase() == name.toLowerCase()
+                    && (cell == null || cell.length == 0
+                        || (player.strFrame != null
+                            && String(player.strFrame).toLowerCase() == cell.toLowerCase())))
+                {
+                    return player;
+                }
+            }
+            return null;
+        }
+
+        private function auraActive(target:String, name:String):Boolean
+        {
+            try
+            {
+                return this.isTrue(Aura.isAuraActive(target, name));
+            }
+            catch (error:Error)
+            {
+                return false;
+            }
+        }
+
+        private function auraStringValue(target:String, name:String, value:String):Boolean
+        {
+            try
+            {
+                return this.isTrue(Aura.isAuraWithStrValActive(target, name, value));
+            }
+            catch (error:Error)
+            {
+                return false;
+            }
+        }
+
+        private function auraNumberValue(target:String, comparison:String,
+            name:String, value:int):Boolean
+        {
+            try
+            {
+                return this.isTrue(Aura.auraComparison(target, comparison, name, value));
+            }
+            catch (error:Error)
+            {
+                return false;
+            }
+        }
+
+        private function jsonArray(raw:String):Array
+        {
+            try
+            {
+                var value:* = JSON.parse(raw);
+                return value is Array ? value as Array : [];
+            }
+            catch (error:Error)
+            {
+                return [];
+            }
         }
 
         private function gameString(value:String):String
@@ -804,11 +1541,11 @@ package grimoire
         {
             if (command.QuestID != null)
             {
-                return String(command.QuestID);
+                return this.resolveText(command.QuestID);
             }
             if (command.Quest != null && command.Quest.Id != null)
             {
-                return String(command.Quest.Id);
+                return this.resolveText(command.Quest.Id);
             }
             return "0";
         }

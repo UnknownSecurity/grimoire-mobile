@@ -1,5 +1,6 @@
 package grimoire
 {
+    import flash.desktop.NativeApplication;
     import flash.display.DisplayObject;
     import flash.display.Loader;
     import flash.display.Shape;
@@ -23,6 +24,7 @@ package grimoire
     import flash.utils.getTimer;
     import flash.utils.setTimeout;
     import flash.utils.Timer;
+    import grimoire.nativebridge.AndroidRunnerBridge;
 
     /**
      * AIR-only command-center overlay for the live AQW display. AQW remains a
@@ -50,6 +52,9 @@ package grimoire
         private static const CIEL_Y:Number = 36;
         private static const CIEL_ICON_SIZE:Number = 40;
         private static const BOT_PAGE_SIZE:int = 3;
+        private static const BOT_COMMAND_PAGE_SIZE:int = 6;
+        private static const BOT_TEMPLATE_PAGE_SIZE:int = 6;
+        private static const BOT_PROPERTY_PAGE_SIZE:int = 5;
         private static const MAX_PACKET_ENTRIES:int = 40;
         private static const MAX_PACKET_CHARACTERS:int = 320;
 
@@ -82,7 +87,6 @@ package grimoire
         private var cielDragOffsetX:Number;
         private var cielDragOffsetY:Number;
         private var cielDragStage:Stage;
-        private var settingsButton:Sprite;
         private var closeButton:Sprite;
         private var navigationButtons:Array = [];
         private var selectedNavigation:String = "Home";
@@ -94,7 +98,16 @@ package grimoire
         private var preferences:MobilePreferences;
         private var botLibrary:MobileBotLibrary;
         private var botRunner:MobileBotRunner;
+        private var runnerBridge:AndroidRunnerBridge;
+        private var botEditor:MobileBotEditor;
+        private var botMode:String = "library";
         private var botPageStart:int;
+        private var botCommandPageStart:int;
+        private var botTemplatePageStart:int;
+        private var botPropertyPageStart:int;
+        private var botFileName:String = "Untitled Bot";
+        private var botEditorCreatesCopy:Boolean;
+        private var botDiscardArmedAt:int;
         private var settingsPage:int;
         private var resetArmedAt:int;
         private var exitArmedAt:int;
@@ -128,6 +141,7 @@ package grimoire
         private var layoutWidth:Number = DESIGN_WIDTH;
         private var layoutHeight:Number = DESIGN_HEIGHT;
         private var interfaceScale:Number = 1;
+        private var rightRailX:Number = RIGHT_RAIL_X;
         private var viewportX:Number;
         private var viewportY:Number;
         private var viewportWidth:Number = DESIGN_WIDTH;
@@ -141,19 +155,26 @@ package grimoire
         public function MobileShell(game:DisplayObject)
         {
             this.game = game;
-            // AQW stays at its native origin and scale. The legacy client reads
-            // Stage-space pointer coordinates, so translating or scaling this
-            // display object makes touch targets diverge from their artwork.
-            this.game.x = 0;
-            this.game.y = 0;
-            this.game.scaleX = this.game.scaleY = 1;
+            // AQW and the overlay share the Stage's SHOW_ALL transform. Do not
+            // move or scale the game clip: AQW can add sibling layers to Stage.
             this.game.scrollRect = new Rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT);
             this.preferences = new MobilePreferences();
             this.botLibrary = new MobileBotLibrary();
             this.botRunner = new MobileBotRunner();
+            this.botEditor = new MobileBotEditor();
+            try
+            {
+                this.runnerBridge = new AndroidRunnerBridge();
+            }
+            catch (runnerBridgeError:Error)
+            {
+                this.runnerBridge = null;
+            }
             this.botLibrary.addEventListener(MobileBotLibrary.CHANGED, this.onBotLibraryChanged);
             this.botRunner.addEventListener(MobileBotRunner.STATE_CHANGED, this.onBotStateChanged);
             HostBridge.addEventListener(HostBridgeEvent.MESSAGE, this.onHostBridgeMessage);
+            NativeApplication.nativeApplication.addEventListener(Event.ACTIVATE,
+                this.onApplicationActivate);
             this.optionTimer = new Timer(500);
             this.optionTimer.addEventListener(TimerEvent.TIMER, this.onOptionTimer);
             this.optionTimer.start();
@@ -175,14 +196,15 @@ package grimoire
 
             this.sidebarContent = new Sprite();
             this.sidebarContent.x = 16;
-            this.sidebarContent.y = 208;
+            this.sidebarContent.y = 148;
             this.chrome.addChild(this.sidebarContent);
 
             this.rightRailContent = new Sprite();
-            this.rightRailContent.x = RIGHT_RAIL_X + 8;
+            this.rightRailContent.x = this.rightRailX + 8;
             this.rightRailContent.y = VIEW_Y + 14;
             this.chrome.addChild(this.rightRailContent);
             this.renderSidebar(this.selectedNavigation);
+            this.configureRunner();
 
             this.toggleButton = this.createToggleButton();
             addChild(this.toggleButton);
@@ -196,28 +218,29 @@ package grimoire
             this.applyTargetsImmediately();
         }
 
-        public function layout(stageWidth:Number, stageHeight:Number):void
+        public function setViewportSize(width:Number, height:Number):void
         {
-            if (stageWidth <= 0 || stageHeight <= 0)
+            if (width <= 0 || height <= 0)
             {
                 return;
             }
 
             removeEventListener(Event.ENTER_FRAME, this.animateLayout);
-            // SHOW_ALL keeps the logical AIR Stage at 960x550 and maps it to
-            // the physical panel with one uniform scale. AQW and the overlay
-            // share that plane, including any device letterbox offset.
+            // SHOW_ALL owns the only device transform. Keep the overlay on the
+            // same logical 960x550 plane as AQW to preserve visual and pointer
+            // alignment across map changes.
             this.interfaceScale = 1;
             this.layoutWidth = DESIGN_WIDTH;
             this.layoutHeight = DESIGN_HEIGHT;
+            this.rightRailX = RIGHT_RAIL_X;
             this.scaleX = this.scaleY = 1;
             this.x = 0;
             this.y = 0;
 
             this.drawChrome();
-            if (this.settingsButton != null)
+            if (this.rightRailContent != null)
             {
-                this.settingsButton.x = this.layoutWidth - 84;
+                this.rightRailContent.x = this.rightRailX + 8;
             }
             if (this.closeButton != null)
             {
@@ -328,21 +351,21 @@ package grimoire
             this.background.graphics.beginFill(CANVAS, 0.96);
             this.background.graphics.drawRect(0, 0, this.layoutWidth, VIEW_Y);
             this.background.graphics.drawRect(0, VIEW_Y, VIEW_X, this.layoutHeight - VIEW_Y);
-            this.background.graphics.drawRect(RIGHT_RAIL_X, VIEW_Y,
-                this.layoutWidth - RIGHT_RAIL_X, this.layoutHeight - VIEW_Y);
+            this.background.graphics.drawRect(this.rightRailX, VIEW_Y,
+                this.layoutWidth - this.rightRailX, this.layoutHeight - VIEW_Y);
             this.background.graphics.endFill();
 
             this.chromeCanvas.graphics.clear();
             this.drawPanel(this.chromeCanvas, MARGIN, MARGIN, this.layoutWidth - (MARGIN * 2), TOP_HEIGHT, 14, SURFACE, DIVIDER, 1);
             this.drawPanel(this.chromeCanvas, MARGIN, VIEW_Y, SIDEBAR_WIDTH, this.layoutHeight - VIEW_Y - MARGIN, 14, SURFACE, DIVIDER, 1);
-            this.drawPanel(this.chromeCanvas, RIGHT_RAIL_X, VIEW_Y, RIGHT_RAIL_WIDTH,
+            this.drawPanel(this.chromeCanvas, this.rightRailX, VIEW_Y, RIGHT_RAIL_WIDTH,
                 this.layoutHeight - VIEW_Y - MARGIN, 14, SURFACE, DIVIDER, 1);
 
         }
 
         private function buildTopNavigation():void
         {
-            var labels:Array = ["Home", "Bot", "Bank", "Options", "Packet", "Tools"];
+            var labels:Array = ["Home", "Bot", "Bank", "Options", "Packet", "Tools", "Runner"];
             var i:int;
             var button:Sprite;
 
@@ -353,9 +376,7 @@ package grimoire
                 this.chrome.addChild(button);
             }
 
-            this.settingsButton = this.createHeaderAction("settings", 876, 19, false);
-            this.chrome.addChild(this.settingsButton);
-            this.closeButton = this.createHeaderAction("close", 916, 19, false);
+            this.closeButton = this.createHeaderAction("close", 916, 21, false);
             this.chrome.addChild(this.closeButton);
         }
 
@@ -440,13 +461,13 @@ package grimoire
             var backgroundShape:Shape = new Shape();
             backgroundShape.name = "background";
             button.addChild(backgroundShape);
-            var labelField:TextField = this.addText(button, label, 0, 21, width, 18, 10, SECONDARY_TEXT, true, "_sans", TextFormatAlign.CENTER);
+            var labelField:TextField = this.addText(button, label, 0, 22, width, 18, 10, SECONDARY_TEXT, true, "_sans", TextFormatAlign.CENTER);
             labelField.name = "label";
 
             var icon:Shape = new Shape();
             icon.name = "icon";
             icon.x = width / 2;
-            icon.y = 10;
+            icon.y = 11;
             this.drawNavigationIcon(icon, label, false);
             button.addChild(icon);
             this.redrawNavigationButton(button, label == this.selectedNavigation, width, height);
@@ -536,6 +557,14 @@ package grimoire
                 icon.graphics.lineTo(-7, 0);
                 icon.graphics.moveTo(7, 0);
                 icon.graphics.lineTo(10, 0);
+            }
+            else if (label == "Runner")
+            {
+                icon.graphics.drawCircle(0, 0, 8);
+                icon.graphics.moveTo(0, -5);
+                icon.graphics.lineTo(0, 1);
+                icon.graphics.moveTo(-3, 4);
+                icon.graphics.lineTo(3, 4);
             }
             else
             {
@@ -677,6 +706,10 @@ package grimoire
                 this.drawSectionCard("CLIENT", "Useful mobile actions", 181,
                     ["Bank", "Lag killer", "Hide players", "FPS 30", "FPS 60", "Settings"]);
             }
+            else if (section == "Runner")
+            {
+                this.renderRunner();
+            }
             else
             {
                 this.renderSettings();
@@ -707,6 +740,14 @@ package grimoire
             this.addText(this.rightRailContent, "HARMAN AIR  •  ORIGINAL AQW RUNTIME",
                 3, 19, 268, 18, 8, PALE_VIOLET, true);
 
+            // The Bot editor uses the full rail for metadata and command
+            // fields; the library view keeps the live client summary card.
+            if (section == "Bot" && this.botMode != "library")
+            {
+                this.renderBotRightRail();
+                return;
+            }
+
             var sessionTitle:String = this.gameConnected ? "CLIENT ONLINE" : "CLIENT DISCONNECTED";
             var player:String = this.playerNameField == null ? "AQW PLAYER" : this.playerNameField.text;
             this.drawRailCard(43, sessionTitle, player,
@@ -714,35 +755,7 @@ package grimoire
 
             if (section == "Bot")
             {
-                var entry:Object = this.botLibrary.selectedEntry;
-                var document:Object = this.botLibrary.selectedDocument;
-                var botName:String = entry == null ? "NO BOT SELECTED"
-                    : this.ellipsize(String(entry.name).toUpperCase(), 34);
-                var source:String = entry == null ? "IMPORT OR SELECT A GBOT"
-                    : (entry.community ? "COMMUNITY BOT" : "IMPORTED BOT");
-                var commands:Array = document == null ? null : document.mobileCommands as Array;
-                var commandCount:int = commands == null ? 0 : commands.length;
-                var delay:String = document == null || document.BotDelay == null
-                    ? "500" : String(Math.max(10, Number(document.BotDelay)));
-                this.drawRailCard(126, botName,
-                    source + "  •  " + commandCount + " COMMANDS  •  " + delay + " MS",
-                    PALE_VIOLET);
-
-                var runnerState:String = this.botRunner.isPaused ? "PAUSED"
-                    : (this.botRunner.isRunning ? "RUNNING" : "IDLE");
-                var progress:String = this.botRunner.commandCount > 0
-                    ? this.botRunner.commandPosition + " / " + this.botRunner.commandCount
-                    : "—";
-                this.drawRailCard(209, "BOT " + runnerState,
-                    this.botRunner.status + "  •  COMMAND " + progress,
-                    this.botRunner.isRunning ? SUCCESS : SECONDARY_TEXT);
-
-                this.rightRailContent.addChild(this.createAction("bot_start", "START",
-                    0, 295, 84, 31));
-                this.rightRailContent.addChild(this.createAction("bot_pause",
-                    this.botRunner.isPaused ? "RESUME" : "PAUSE", 92, 295, 84, 31));
-                this.rightRailContent.addChild(this.createAction("bot_stop", "STOP",
-                    184, 295, 84, 31));
+                this.renderBotRightRail();
             }
             else if (section == "Packet")
             {
@@ -764,6 +777,22 @@ package grimoire
                     + (this.playersHidden ? "PLAYERS HIDDEN" : "PLAYERS VISIBLE"),
                     this.lagKillerEnabled ? SUCCESS : SECONDARY_TEXT);
             }
+            else if (section == "Runner")
+            {
+                this.drawRailCard(126, this.preferences.runnerEnabled
+                    ? "BACKGROUND RUNNER ON" : "BACKGROUND RUNNER OFF",
+                    this.preferences.runnerEnabled
+                        ? "A foreground service keeps the AIR session eligible while another app is open."
+                        : "Enable Runner when you want an active bot to continue outside Grimoire.",
+                    this.preferences.runnerEnabled ? SUCCESS : SECONDARY_TEXT);
+                this.drawRailCard(209, "BOT STATUS", this.runnerStatusLabel(),
+                    this.botRunner.isRunning ? SUCCESS : SECONDARY_TEXT);
+                this.drawRailCard(292, "BATTERY PROFILE",
+                    this.preferences.runnerKeepCpuAwake
+                        ? "RELIABLE — CPU wake lock is held only while a bot is running."
+                        : "BALANCED — no CPU wake lock; Android may pause work while the device sleeps.",
+                    this.preferences.runnerKeepCpuAwake ? PALE_VIOLET : SUCCESS);
+            }
             else
             {
                 var activeBot:String = this.botLibrary.selectedEntry == null
@@ -775,6 +804,136 @@ package grimoire
                     "Close the overlay, then hold and drag Ciel anywhere inside the playable surface.",
                     PALE_VIOLET);
             }
+        }
+
+        private function renderBotRightRail():void
+        {
+            if (this.botMode == "editor")
+            {
+                this.renderBotPropertyEditor();
+                return;
+            }
+            if (this.botMode == "templates")
+            {
+                this.drawRailCard(43, "COMMAND TEMPLATES",
+                    "Choose a template on the left. It is inserted after the selected command and can be fully edited next.",
+                    PALE_VIOLET);
+                this.drawRailCard(126, "LEGACY SAFE",
+                    "Templates use the desktop Grimoire assembly identity. Unknown commands already in a bot remain untouched.",
+                    SUCCESS);
+                return;
+            }
+
+            var entry:Object = this.botLibrary.selectedEntry;
+            var document:Object = this.botLibrary.selectedDocument;
+            var botName:String = entry == null ? "NO BOT SELECTED"
+                : this.ellipsize(String(entry.name).toUpperCase(), 34);
+            var source:String = entry == null ? "IMPORT OR SELECT A GBOT"
+                : (entry.community ? "COMMUNITY BOT" : "IMPORTED BOT");
+            var commands:Array = document == null ? null : document.mobileCommands as Array;
+            var commandCount:int = commands == null ? 0 : commands.length;
+            var delay:String = document == null || document.BotDelay == null
+                ? "500" : String(Math.max(10, Number(document.BotDelay)));
+            this.drawRailCard(126, botName,
+                source + "  •  " + commandCount + " COMMANDS  •  " + delay + " MS",
+                PALE_VIOLET);
+
+            var runnerState:String = this.botRunner.isPaused ? "PAUSED"
+                : (this.botRunner.isRunning ? "RUNNING" : "IDLE");
+            var progress:String = this.botRunner.commandCount > 0
+                ? this.botRunner.commandPosition + " / " + this.botRunner.commandCount
+                : "—";
+            this.drawRailCard(209, "BOT " + runnerState,
+                this.botRunner.status + "  •  COMMAND " + progress,
+                this.botRunner.isRunning ? SUCCESS : SECONDARY_TEXT);
+
+            this.rightRailContent.addChild(this.createAction("bot_start", "START",
+                0, 295, 84, 31));
+            this.rightRailContent.addChild(this.createAction("bot_pause",
+                this.botRunner.isPaused ? "RESUME" : "PAUSE", 92, 295, 84, 31));
+            this.rightRailContent.addChild(this.createAction("bot_stop", "STOP",
+                184, 295, 84, 31));
+        }
+
+        private function renderBotPropertyEditor():void
+        {
+            var command:Object = this.botEditor.selectedCommand;
+            if (command == null)
+            {
+                this.addText(this.rightRailContent, "BOT DETAILS", 3, 43, 268, 18,
+                    10, PALE_VIOLET, true);
+                this.addBotInput(this.rightRailContent, "bot_filename", "FILE NAME",
+                    this.botFileName, 70, 268);
+                this.addBotInput(this.rightRailContent, "bot_metadata_Author", "AUTHOR",
+                    this.botEditor.document == null || this.botEditor.document.Author == null
+                        ? "" : String(this.botEditor.document.Author), 123, 268);
+                this.addBotInput(this.rightRailContent, "bot_metadata_Description", "DESCRIPTION",
+                    this.botEditor.document == null || this.botEditor.document.Description == null
+                        ? "" : String(this.botEditor.document.Description), 176, 268);
+                this.addBotInput(this.rightRailContent, "bot_metadata_BotDelay", "BOT DELAY (MS)",
+                    this.botEditor.document == null || this.botEditor.document.BotDelay == null
+                        ? "500" : String(this.botEditor.document.BotDelay), 229, 268);
+                this.drawRailCard(286, "EDITING NOTES",
+                    "Select a command to edit its primitive fields. Nested and unknown data is preserved unchanged when saved.",
+                    SECONDARY_TEXT);
+                return;
+            }
+
+            this.drawRailCard(43, "COMMAND " + (this.botEditor.selectedIndex + 1),
+                this.botEditor.commandName(command) + "  •  "
+                + (this.botEditor.dirty ? "UNSAVED CHANGES" : "SAVED"),
+                this.botEditor.dirty ? PALE_VIOLET : SUCCESS);
+
+            var properties:Array = this.botEditor.selectedPropertyNames();
+            var maximumStart:int = this.maximumPageStart(properties.length, BOT_PROPERTY_PAGE_SIZE);
+            this.botPropertyPageStart = Math.max(0, Math.min(maximumStart, this.botPropertyPageStart));
+            var y:Number = 124;
+            for (var i:int = this.botPropertyPageStart;
+                i < properties.length && i < this.botPropertyPageStart + BOT_PROPERTY_PAGE_SIZE; i++)
+            {
+                var property:String = String(properties[i]);
+                this.addBotInput(this.rightRailContent, "bot_property_" + property,
+                    property.toUpperCase(), command[property] == null ? "" : String(command[property]),
+                    y, 268);
+                y += 53;
+            }
+            if (properties.length == 0)
+            {
+                this.drawRailCard(124, "NO EDITABLE FIELDS",
+                    "This command has no primitive properties. Its type and nested data will still be preserved.",
+                    SECONDARY_TEXT);
+            }
+
+            var firstShown:int = properties.length == 0 ? 0 : this.botPropertyPageStart + 1;
+            var lastShown:int = Math.min(properties.length, this.botPropertyPageStart + BOT_PROPERTY_PAGE_SIZE);
+            this.rightRailContent.addChild(this.createAction("bot_properties_previous", "‹", 0, 401, 42, 27));
+            this.addText(this.rightRailContent,
+                properties.length == 0 ? "NO FIELDS" : firstShown + "–" + lastShown + " / " + properties.length,
+                49, 406, 170, 17, 8, SECONDARY_TEXT, true, "_sans", TextFormatAlign.CENTER);
+            this.rightRailContent.addChild(this.createAction("bot_properties_next", "›", 226, 401, 42, 27));
+        }
+
+        private function addBotInput(parent:Sprite, id:String, label:String, value:String,
+            y:Number, width:Number):TextField
+        {
+            this.addText(parent, label, 2, y, width - 4, 16, 8, SECONDARY_TEXT, true);
+            var input:TextField = new TextField();
+            input.name = id;
+            input.type = TextFieldType.INPUT;
+            input.defaultTextFormat = new TextFormat("_sans", 9, PRIMARY_TEXT);
+            input.background = true;
+            input.backgroundColor = CONTROL;
+            input.border = true;
+            input.borderColor = DIVIDER;
+            input.x = 0;
+            input.y = y + 18;
+            input.width = width;
+            input.height = 27;
+            input.maxChars = 512;
+            input.text = value == null ? "" : value;
+            input.addEventListener(Event.CHANGE, this.onBotEditorInputChanged);
+            parent.addChild(input);
+            return input;
         }
 
         private function drawRailCard(y:Number, title:String, body:String, accent:uint):void
@@ -792,10 +951,11 @@ package grimoire
         private function sectionSubtitle(section:String):String
         {
             if (section == "Home") return "Overview and player controls";
-            if (section == "Bot") return "Load, inspect, and run legacy GBots";
+            if (section == "Bot") return "Create, edit, and run legacy GBots";
             if (section == "Options") return "Desktop-compatible client options";
             if (section == "Packet") return "Bounded capture, replay, and packet send";
             if (section == "Tools") return "In-game Grimoire utilities";
+            if (section == "Runner") return "Background execution and status notices";
             return "General, keys, and advanced";
         }
 
@@ -882,6 +1042,17 @@ package grimoire
 
         private function renderBotManager():void
         {
+            if (this.botMode == "editor")
+            {
+                this.renderBotCommandEditor();
+                return;
+            }
+            if (this.botMode == "templates")
+            {
+                this.renderBotTemplatePicker();
+                return;
+            }
+
             var entry:Object = this.botLibrary.selectedEntry;
             var selectedName:String = entry == null ? "NO BOT SELECTED" : String(entry.name).toUpperCase();
             var source:String = entry == null ? "IMPORT OR SELECT A BOT"
@@ -924,18 +1095,99 @@ package grimoire
                 49, 215, 186, 17, 8, SECONDARY_TEXT, true, "_sans", TextFormatAlign.CENTER);
             this.sidebarContent.addChild(this.createAction("bot_next", "›", 242, 211, 42, 24));
 
-            this.sidebarContent.addChild(this.createAction("bot_import", "IMPORT", 0, 239, 90, 26));
-            this.sidebarContent.addChild(this.createAction("bot_refresh", "REFRESH", 97, 239, 90, 26));
-            this.sidebarContent.addChild(this.createAction("bot_delete", "DELETE", 194, 239, 90, 26));
-            this.sidebarContent.addChild(this.createAction("bot_start", "START", 0, 270, 90, 28));
-            this.sidebarContent.addChild(this.createAction("bot_pause", this.botRunner.isPaused ? "RESUME" : "PAUSE", 97, 270, 90, 28));
-            this.sidebarContent.addChild(this.createAction("bot_stop", "STOP", 194, 270, 90, 28));
+            this.sidebarContent.addChild(this.createAction("bot_new", "NEW", 0, 239, 90, 26));
+            this.sidebarContent.addChild(this.createAction("bot_import", "IMPORT", 97, 239, 90, 26));
+            this.sidebarContent.addChild(this.createAction("bot_refresh", "REFRESH", 194, 239, 90, 26));
+            this.sidebarContent.addChild(this.createAction("bot_edit", "EDIT", 0, 270, 90, 28));
+            this.sidebarContent.addChild(this.createAction("bot_start", "START", 97, 270, 90, 28));
+            this.sidebarContent.addChild(this.createAction("bot_delete", "DELETE", 194, 270, 90, 28));
+        }
+
+        private function renderBotCommandEditor():void
+        {
+            var dirtyLabel:String = this.botEditor.dirty ? "SAVE*" : "SAVED";
+            this.sidebarContent.addChild(this.createAction("bot_editor_back", "BACK", 0, 43, 60, 27));
+            this.sidebarContent.addChild(this.createAction("bot_metadata", "DETAILS", 65, 43, 70, 27));
+            this.sidebarContent.addChild(this.createAction("bot_add_command", "ADD", 140, 43, 65, 27));
+            this.sidebarContent.addChild(this.createAction("bot_save", dirtyLabel, 210, 43, 74, 27));
+
+            var commands:Array = this.botEditor.commands;
+            var maximumStart:int = this.maximumPageStart(commands.length, BOT_COMMAND_PAGE_SIZE);
+            this.botCommandPageStart = Math.max(0, Math.min(maximumStart, this.botCommandPageStart));
+            if (this.botEditor.selectedIndex >= 0
+                && (this.botEditor.selectedIndex < this.botCommandPageStart
+                    || this.botEditor.selectedIndex >= this.botCommandPageStart + BOT_COMMAND_PAGE_SIZE))
+            {
+                this.botCommandPageStart = Math.min(maximumStart,
+                    Math.floor(this.botEditor.selectedIndex / BOT_COMMAND_PAGE_SIZE) * BOT_COMMAND_PAGE_SIZE);
+            }
+
+            var y:Number = 77;
+            for (var i:int = this.botCommandPageStart;
+                i < commands.length && i < this.botCommandPageStart + BOT_COMMAND_PAGE_SIZE; i++)
+            {
+                var marker:String = i == this.botEditor.selectedIndex ? "● " : "○ ";
+                this.sidebarContent.addChild(this.createAction("bot_command_select_" + i,
+                    marker + this.ellipsize(this.botEditor.commandSummary(commands[i]), 37),
+                    0, y, 284, 27, TextFormatAlign.LEFT));
+                y += 29;
+            }
+            if (commands.length == 0)
+            {
+                this.drawInfoCard(85, "EMPTY BOT", "Tap ADD to insert a desktop-compatible command template.");
+            }
+
+            var firstShown:int = commands.length == 0 ? 0 : this.botCommandPageStart + 1;
+            var lastShown:int = Math.min(commands.length, this.botCommandPageStart + BOT_COMMAND_PAGE_SIZE);
+            this.sidebarContent.addChild(this.createAction("bot_commands_previous", "‹", 0, 253, 42, 24));
+            this.addText(this.sidebarContent,
+                commands.length == 0 ? "NO COMMANDS" : firstShown + "–" + lastShown + " / " + commands.length,
+                49, 257, 186, 17, 8, SECONDARY_TEXT, true, "_sans", TextFormatAlign.CENTER);
+            this.sidebarContent.addChild(this.createAction("bot_commands_next", "›", 242, 253, 42, 24));
+
+            this.sidebarContent.addChild(this.createAction("bot_command_up", "UP", 0, 281, 66, 27));
+            this.sidebarContent.addChild(this.createAction("bot_command_down", "DOWN", 72, 281, 66, 27));
+            this.sidebarContent.addChild(this.createAction("bot_command_duplicate", "COPY", 144, 281, 66, 27));
+            this.sidebarContent.addChild(this.createAction("bot_command_delete", "DELETE", 216, 281, 68, 27));
+        }
+
+        private function renderBotTemplatePicker():void
+        {
+            this.sidebarContent.addChild(this.createAction("bot_templates_back", "BACK", 0, 43, 70, 27));
+            this.addText(this.sidebarContent, "ADD COMMAND TEMPLATE", 78, 48, 206, 18,
+                9, PALE_VIOLET, true, "_sans", TextFormatAlign.RIGHT);
+
+            var templates:Array = this.botEditor.templates;
+            var maximumStart:int = this.maximumPageStart(templates.length, BOT_TEMPLATE_PAGE_SIZE);
+            this.botTemplatePageStart = Math.max(0, Math.min(maximumStart, this.botTemplatePageStart));
+            var y:Number = 78;
+            for (var i:int = this.botTemplatePageStart;
+                i < templates.length && i < this.botTemplatePageStart + BOT_TEMPLATE_PAGE_SIZE; i++)
+            {
+                var label:String = this.botEditor.templateCategory(i).toUpperCase() + "  •  "
+                    + this.botEditor.templateLabel(i);
+                this.sidebarContent.addChild(this.createAction("bot_template_" + i,
+                    this.ellipsize(label, 38), 0, y, 284, 30, TextFormatAlign.LEFT));
+                y += 33;
+            }
+
+            var firstShown:int = templates.length == 0 ? 0 : this.botTemplatePageStart + 1;
+            var lastShown:int = Math.min(templates.length, this.botTemplatePageStart + BOT_TEMPLATE_PAGE_SIZE);
+            this.sidebarContent.addChild(this.createAction("bot_templates_previous", "‹", 0, 281, 42, 27));
+            this.addText(this.sidebarContent, firstShown + "–" + lastShown + " / " + templates.length,
+                49, 286, 186, 17, 8, SECONDARY_TEXT, true, "_sans", TextFormatAlign.CENTER);
+            this.sidebarContent.addChild(this.createAction("bot_templates_next", "›", 242, 281, 42, 27));
         }
 
         private function maximumBotPageStart(count:int):int
         {
             return count <= 0 ? 0
                 : Math.floor((count - 1) / BOT_PAGE_SIZE) * BOT_PAGE_SIZE;
+        }
+
+        private function maximumPageStart(count:int, pageSize:int):int
+        {
+            return count <= 0 ? 0 : Math.floor((count - 1) / pageSize) * pageSize;
         }
 
         private function renderSettings():void
@@ -974,6 +1226,27 @@ package grimoire
                 this.sidebarContent.addChild(this.createAction("advanced_reset", resetLabel, 0, 184, 284, 38));
                 this.drawInfoCard(235, "MOBILE DATA", "Reset removes mobile settings and session data. Imported and Community bots, plus the desktop installation, are preserved.");
             }
+        }
+
+        private function renderRunner():void
+        {
+            this.addSettingToggle("runner_enabled", "BACKGROUND RUNNER",
+                this.preferences.runnerEnabled, 43);
+            this.addSettingToggle("runner_stop_notifications", "BOT STOP NOTICES",
+                this.preferences.runnerStopNotifications, 77);
+            this.addSettingToggle("runner_keep_cpu_awake", "KEEP CPU AWAKE",
+                this.preferences.runnerKeepCpuAwake, 111);
+            this.sidebarContent.addChild(this.createAction("runner_battery_settings",
+                "OPEN ANDROID BATTERY SETTINGS", 0, 153, 284, 34));
+
+            var title:String = this.preferences.runnerEnabled
+                ? "RUNNER " + this.runnerStatusLabel() : "RUNNER DISABLED";
+            var body:String = this.runnerBridge == null
+                ? "The Android notification bridge is unavailable in this build."
+                : (this.preferences.runnerKeepCpuAwake
+                    ? "Reliable mode uses more battery and holds the CPU awake only during an active bot run."
+                    : "Balanced mode uses no CPU wake lock. Switching apps remains supported; device sleep may pause AIR timers.");
+            this.drawInfoCard(197, title, body);
         }
 
         private function addSettingToggle(id:String, label:String, enabled:Boolean, y:Number):void
@@ -1079,7 +1352,7 @@ package grimoire
             {
                 this.botRunner.togglePause();
             }
-            else if (id == "header_settings" || id == "command_settings")
+            else if (id == "command_settings")
             {
                 this.showSection("Settings");
             }
@@ -1140,6 +1413,16 @@ package grimoire
             {
                 HostBridge.invoke("SetFPS", 60);
             }
+            else if (id == "bot_new")
+            {
+                this.botEditor.createNew();
+                this.botFileName = "Untitled Bot";
+                this.botEditorCreatesCopy = true;
+                this.botMode = "editor";
+                this.botCommandPageStart = 0;
+                this.botPropertyPageStart = 0;
+                this.renderSidebar("Bot");
+            }
             else if (id == "bot_import")
             {
                 this.botLibrary.browseForImport();
@@ -1163,9 +1446,153 @@ package grimoire
             {
                 this.botLibrary.deleteSelected();
             }
+            else if (id == "bot_edit")
+            {
+                if (this.botLibrary.selectedDocument == null)
+                {
+                    this.botLibraryStatus("SELECT A BOT BEFORE EDITING");
+                }
+                else
+                {
+                    this.botEditor.load(this.botLibrary.selectedDocument);
+                    this.botFileName = this.botLibrary.selectedEntry == null
+                        ? "Untitled Bot" : String(this.botLibrary.selectedEntry.name);
+                    this.botEditorCreatesCopy = false;
+                    this.botMode = "editor";
+                    this.botCommandPageStart = 0;
+                    this.botPropertyPageStart = 0;
+                    this.renderSidebar("Bot");
+                }
+            }
+            else if (id == "bot_editor_back")
+            {
+                if (this.botEditor.dirty && getTimer() - this.botDiscardArmedAt > 3000)
+                {
+                    this.botDiscardArmedAt = getTimer();
+                    this.botLibraryStatus("UNSAVED CHANGES — TAP BACK AGAIN TO LEAVE");
+                }
+                else
+                {
+                    this.botMode = "library";
+                    this.renderSidebar("Bot");
+                }
+            }
+            else if (id == "bot_templates_back")
+            {
+                this.botMode = "editor";
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_metadata")
+            {
+                this.botEditor.select(-1);
+                this.botPropertyPageStart = 0;
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_add_command")
+            {
+                this.botMode = "templates";
+                this.botTemplatePageStart = 0;
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_save")
+            {
+                if (this.botLibrary.saveEditedBot(this.botEditor.exportDocument(),
+                    this.botFileName, this.botEditorCreatesCopy))
+                {
+                    this.botEditor.load(this.botLibrary.selectedDocument);
+                    this.botEditor.markSaved();
+                    this.botFileName = this.botLibrary.selectedEntry == null
+                        ? this.botFileName : String(this.botLibrary.selectedEntry.name);
+                    this.botEditorCreatesCopy = false;
+                    this.botMode = "editor";
+                }
+                this.renderSidebar("Bot");
+            }
+            else if (id.indexOf("bot_command_select_") == 0)
+            {
+                this.botEditor.select(int(id.substr(19)));
+                this.botPropertyPageStart = 0;
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_commands_previous")
+            {
+                this.botCommandPageStart = Math.max(0,
+                    this.botCommandPageStart - BOT_COMMAND_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_commands_next")
+            {
+                this.botCommandPageStart = Math.min(
+                    this.maximumPageStart(this.botEditor.commands.length, BOT_COMMAND_PAGE_SIZE),
+                    this.botCommandPageStart + BOT_COMMAND_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_command_up" || id == "bot_command_down")
+            {
+                this.botEditor.moveSelected(id == "bot_command_up" ? -1 : 1);
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_command_duplicate")
+            {
+                this.botEditor.duplicateSelected();
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_command_delete")
+            {
+                this.botEditor.deleteSelected();
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_templates_previous")
+            {
+                this.botTemplatePageStart = Math.max(0,
+                    this.botTemplatePageStart - BOT_TEMPLATE_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_templates_next")
+            {
+                this.botTemplatePageStart = Math.min(
+                    this.maximumPageStart(this.botEditor.templates.length, BOT_TEMPLATE_PAGE_SIZE),
+                    this.botTemplatePageStart + BOT_TEMPLATE_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id.indexOf("bot_template_") == 0)
+            {
+                if (this.botEditor.addTemplate(int(id.substr(13))))
+                {
+                    this.botMode = "editor";
+                    this.botPropertyPageStart = 0;
+                }
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_properties_previous")
+            {
+                this.botPropertyPageStart = Math.max(0,
+                    this.botPropertyPageStart - BOT_PROPERTY_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_properties_next")
+            {
+                this.botPropertyPageStart = Math.min(
+                    this.maximumPageStart(this.botEditor.selectedPropertyNames().length,
+                        BOT_PROPERTY_PAGE_SIZE),
+                    this.botPropertyPageStart + BOT_PROPERTY_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
             else if (id.indexOf("bot_select_") == 0)
             {
+                this.botMode = "library";
                 this.botLibrary.select(int(id.substr(11)));
+            }
+            else if (id == "runner_battery_settings")
+            {
+                if (this.runnerBridge == null || !this.runnerBridge.openBatterySettings())
+                {
+                    this.botLibraryStatus("ANDROID BATTERY SETTINGS COULD NOT BE OPENED");
+                }
+            }
+            else if (id.indexOf("runner_") == 0)
+            {
+                this.toggleRunnerPreference(id);
             }
             else if (id.indexOf("settings_") == 0)
             {
@@ -1253,6 +1680,30 @@ package grimoire
             {
                 HostBridge.call("mobileCommand", id);
             }
+        }
+
+        private function onBotEditorInputChanged(event:Event):void
+        {
+            var input:TextField = event.currentTarget as TextField;
+            if (input == null)
+            {
+                return;
+            }
+
+            var accepted:Boolean = true;
+            if (input.name == "bot_filename")
+            {
+                this.botFileName = input.text;
+            }
+            else if (input.name.indexOf("bot_metadata_") == 0)
+            {
+                accepted = this.botEditor.setMetadata(input.name.substr(13), input.text);
+            }
+            else if (input.name.indexOf("bot_property_") == 0)
+            {
+                accepted = this.botEditor.setSelectedProperty(input.name.substr(13), input.text);
+            }
+            input.borderColor = accepted ? DIVIDER : DANGER;
         }
 
         private function createToggleButton():Sprite
@@ -1385,8 +1836,9 @@ package grimoire
             }
             this.cielDragging = true;
             this.cielDragMoved = false;
-            this.cielDragOffsetX = event.stageX - this.toggleButton.x;
-            this.cielDragOffsetY = event.stageY - this.toggleButton.y;
+            var localPointer:Point = globalToLocal(new Point(event.stageX, event.stageY));
+            this.cielDragOffsetX = localPointer.x - this.toggleButton.x;
+            this.cielDragOffsetY = localPointer.y - this.toggleButton.y;
             this.cielDragStage = stage;
             this.hideCielTooltip();
             this.cielDragStage.addEventListener(MouseEvent.MOUSE_MOVE, this.onCielDragMove, true, 1000);
@@ -1400,10 +1852,11 @@ package grimoire
             {
                 return;
             }
+            var localPointer:Point = globalToLocal(new Point(event.stageX, event.stageY));
             var nextX:Number = Math.max(28, Math.min(this.layoutWidth - 28,
-                event.stageX - this.cielDragOffsetX));
+                localPointer.x - this.cielDragOffsetX));
             var nextY:Number = Math.max(28, Math.min(this.layoutHeight - 28,
-                event.stageY - this.cielDragOffsetY));
+                localPointer.y - this.cielDragOffsetY));
             if (Math.abs(nextX - this.toggleButton.x) > 3
                 || Math.abs(nextY - this.toggleButton.y) > 3)
             {
@@ -1469,6 +1922,8 @@ package grimoire
             removeEventListener(Event.REMOVED_FROM_STAGE, this.onRemovedFromStage);
             removeEventListener(Event.ENTER_FRAME, this.animateLayout);
             HostBridge.removeEventListener(HostBridgeEvent.MESSAGE, this.onHostBridgeMessage);
+            NativeApplication.nativeApplication.removeEventListener(Event.ACTIVATE,
+                this.onApplicationActivate);
             if (this.optionTimer != null)
             {
                 this.optionTimer.stop();
@@ -1489,6 +1944,11 @@ package grimoire
             if (this.toggleButton != null && this.toggleButton.parent != null)
             {
                 this.toggleButton.parent.removeChild(this.toggleButton);
+            }
+            if (this.runnerBridge != null)
+            {
+                this.runnerBridge.dispose();
+                this.runnerBridge = null;
             }
         }
 
@@ -1699,13 +2159,13 @@ package grimoire
 
         private function calculateTargets():void
         {
-            this.viewportX = 0;
-            this.viewportY = 0;
+            this.viewportX = (this.layoutWidth - GAME_WIDTH) / 2;
+            this.viewportY = (this.layoutHeight - GAME_HEIGHT) / 2;
             this.viewportWidth = GAME_WIDTH;
             this.viewportHeight = GAME_HEIGHT;
             this.targetToggleX = this.preferences.cielX >= 0
                 ? Math.max(28, Math.min(this.layoutWidth - 28, this.preferences.cielX))
-                : CIEL_X;
+                : this.layoutWidth - 36;
             this.targetToggleY = this.preferences.cielY >= 0
                 ? Math.max(28, Math.min(this.layoutHeight - 28, this.preferences.cielY))
                 : CIEL_Y;
@@ -1726,9 +2186,6 @@ package grimoire
 
         private function applyTargetsImmediately():void
         {
-            this.game.x = 0;
-            this.game.y = 0;
-            this.game.scaleX = this.game.scaleY = 1;
             this.chrome.alpha = this.targetChromeAlpha;
             this.chrome.visible = this.chromeVisible;
             this.toggleButton.x = this.targetToggleX;
@@ -1772,9 +2229,19 @@ package grimoire
 
         private function onBotStateChanged(event:Event):void
         {
-            if (this.selectedNavigation == "Bot" || this.selectedNavigation == "Home")
+            this.syncRunnerStatus();
+            if (this.selectedNavigation == "Bot" || this.selectedNavigation == "Home"
+                || this.selectedNavigation == "Runner")
             {
                 this.renderSidebar(this.selectedNavigation);
+            }
+        }
+
+        private function onApplicationActivate(event:Event):void
+        {
+            if (this.preferences.runnerEnabled)
+            {
+                this.configureRunner();
             }
         }
 
@@ -1802,6 +2269,91 @@ package grimoire
             this.renderSidebar("Settings");
         }
 
+        private function toggleRunnerPreference(id:String):void
+        {
+            if (id == "runner_enabled")
+            {
+                this.preferences.runnerEnabled = !this.preferences.runnerEnabled;
+            }
+            else if (id == "runner_stop_notifications")
+            {
+                this.preferences.runnerStopNotifications =
+                    !this.preferences.runnerStopNotifications;
+            }
+            else if (id == "runner_keep_cpu_awake")
+            {
+                this.preferences.runnerKeepCpuAwake =
+                    !this.preferences.runnerKeepCpuAwake;
+            }
+            this.preferences.save();
+            this.configureRunner();
+            this.renderSidebar("Runner");
+        }
+
+        private function configureRunner():void
+        {
+            this.preferences.apply(stage);
+            if (this.runnerBridge == null)
+            {
+                return;
+            }
+            try
+            {
+                this.runnerBridge.configure(this.preferences.runnerEnabled,
+                    this.preferences.runnerStopNotifications,
+                    this.preferences.runnerKeepCpuAwake, this.runnerState());
+            }
+            catch (error:Error)
+            {
+            }
+        }
+
+        private function syncRunnerStatus():void
+        {
+            if (this.runnerBridge == null || !this.preferences.runnerEnabled)
+            {
+                return;
+            }
+            try
+            {
+                this.runnerBridge.updateStatus(this.runnerState(),
+                    this.preferences.runnerStopNotifications,
+                    this.preferences.runnerKeepCpuAwake);
+            }
+            catch (error:Error)
+            {
+            }
+        }
+
+        private function runnerState():String
+        {
+            if (this.botRunner.isPaused)
+            {
+                return "paused";
+            }
+            if (this.botRunner.isRunning)
+            {
+                return "running";
+            }
+            if (this.botRunner.status == "BOT IDLE")
+            {
+                return "idle";
+            }
+            return this.botRunner.status.indexOf("ERROR") >= 0
+                || this.botRunner.status.indexOf("UNSUPPORTED") >= 0
+                ? "error" : "stopped";
+        }
+
+        private function runnerStatusLabel():String
+        {
+            var state:String = this.runnerState();
+            if (state == "running") return "RUNNING";
+            if (state == "paused") return "PAUSED";
+            if (state == "error") return "STOPPED WITH ERROR";
+            if (state == "stopped") return "STOPPED";
+            return "READY";
+        }
+
         private function fullReset():void
         {
             if (getTimer() - this.resetArmedAt > 3000)
@@ -1814,7 +2366,7 @@ package grimoire
             }
             this.botRunner.stop();
             this.preferences.reset();
-            this.preferences.apply(stage);
+            this.configureRunner();
             Root.username = null;
             Root.password = null;
             this.chromeVisible = !this.preferences.startFocused;

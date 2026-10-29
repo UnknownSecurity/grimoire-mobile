@@ -1,0 +1,38 @@
+{
+  "$type": "Grimoire.Botting.Configuration, Grimoire, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+  "Commands": {
+    "$type": "System.Collections.Generic.List`1[[Grimoire.Botting.IBotCommand, Grimoire, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+    "$values": [
+      {
+        "$type": "Grimoire.Botting.Commands.Combat.CmdSkillSet, Grimoire, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Name": "LEVELING"
+      },
+      {
+        "$type": "Grimoire.Botting.Commands.Misc.CmdBotDelay, Grimoire, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Delay": 100
+      },
+      {
+        "$type": "Grimoire.Botting.Commands.Map.CmdJoin, Grimoire, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Map": "battleon",
+        "Cell": "Enter",
+        "Pad": "Spawn"
+      },
+      {
+        "$type": "Grimoire.Botting.Commands.Map.CmdMoveToCell, Grimoire, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Cell": "Enter",
+        "Pad": "Spawn"
+      },
+      {
+        "$type": "Grimoire.Botting.Commands.Combat.CmdKill, Grimoire, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Monster": "*"
+      },
+      {
+        "$type": "Grimoire.Botting.Commands.Misc.CmdDelay, Grimoire, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "Delay": 100
+      }
+    ]
+  },
+  "Author": "Compatibility fixture",
+  "Description": "Synthetic looping level-up bot used by mobile regression tests",
+  "BotDelay": 100
+}

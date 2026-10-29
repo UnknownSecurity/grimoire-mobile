@@ -109,11 +109,10 @@ package grimoire
 			}
 			else
 			{
-				// Scale the complete 960x550 Stage uniformly and center it within
-				// wider Android displays. AQW and the overlay keep one logical
-				// coordinate plane, so artwork and touch targets remain aligned.
-				// An empty Stage alignment centers SHOW_ALL letterboxing on both
-				// axes; StageAlign has no CENTER constant.
+				// Scale the complete 960x550 Stage as one plane. AQW creates some
+				// map and entity layers directly on Stage, so transforming only its
+				// root clip makes those layers and pointer coordinates diverge.
+				// An empty alignment centers SHOW_ALL letterboxing on both axes.
 				stage.align = "";
 				stage.scaleMode = StageScaleMode.SHOW_ALL;
 				stage.frameRate = 30;
@@ -251,7 +250,7 @@ package grimoire
 				var mobileShellClass:Class = getDefinitionByName("grimoire.MobileShell") as Class;
 				this.mobileShell = new mobileShellClass(DisplayObject(Game));
 				addChild(this.mobileShell);
-				this.mobileShell.layout(stage.stageWidth, stage.stageHeight);
+				this.mobileShell.setViewportSize(stage.stageWidth, stage.stageHeight);
 			}
 			Game.addEventListener(MouseEvent.CLICK, this.onGameClick);
 			Game.addEventListener(KeyboardEvent.KEY_DOWN, this.onGameKeyboard);
@@ -702,7 +701,7 @@ package grimoire
 			this.layoutLoadingSurface();
 			if (this.mobileShell != null)
 			{
-				this.mobileShell.layout(stage.stageWidth, stage.stageHeight);
+				this.mobileShell.setViewportSize(stage.stageWidth, stage.stageHeight);
 			}
 		}
 

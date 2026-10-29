@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension xmlns="http://ns.adobe.com/air/extension/51.4">
+    <id>com.unknownsecurity.grimoireexodus.mobile.runner</id>
+    <versionNumber>1.0.0</versionNumber>
+    <platforms>
+        <platform name="Android-ARM">
+            <applicationDeployment>
+                <nativeLibrary>GrimoireRunnerService.jar</nativeLibrary>
+                <initializer>com.unknownsecurity.grimoireexodus.runner.RunnerExtension</initializer>
+                <finalizer>com.unknownsecurity.grimoireexodus.runner.RunnerExtension</finalizer>
+            </applicationDeployment>
+        </platform>
+        <platform name="Android-ARM64">
+            <applicationDeployment>
+                <nativeLibrary>GrimoireRunnerService.jar</nativeLibrary>
+                <initializer>com.unknownsecurity.grimoireexodus.runner.RunnerExtension</initializer>
+                <finalizer>com.unknownsecurity.grimoireexodus.runner.RunnerExtension</finalizer>
+            </applicationDeployment>
+        </platform>
+    </platforms>
+</extension>

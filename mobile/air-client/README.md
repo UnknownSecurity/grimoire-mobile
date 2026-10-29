@@ -16,6 +16,8 @@ original AQW response so login remains functional without a native filter.
 
 - HARMAN AIR SDK 51.4, either in `AIR_HOME` or the ignored
   `.tools/AIRSDK_51.4.1.2` directory;
+- Android SDK platform files, exposed through `ANDROID_SDK_ROOT`, `ANDROID_HOME`,
+  or an `adb` installation on `PATH`;
 - JDK 17 or 21;
 - the AIR SDK license appropriate for the developer or organization.
 
@@ -64,23 +66,25 @@ close button returns to the unobstructed client without changing the game
 viewport.
 
 The title block has been removed from the compact top bar. Bot, Bank, Options,
-Packet, and Tools are available directly. Bank opens AQW's live bank; Options
-cover the applicable desktop client behaviors; Packet keeps a bounded capture
-history and can send controlled client/server packets; and Tools exposes common
-player and client actions. Legacy packet and packet-list GBot commands are also
-handled by the cooperative mobile runner.
+Packet, Tools, and the mobile-only Runner are available directly. Bank opens
+AQW's live bank; Options cover the applicable desktop client behaviors; Packet
+keeps a bounded capture history and can send controlled client/server packets;
+and Tools exposes common player and client actions. Legacy packet and
+packet-list GBot commands are also handled by the cooperative mobile runner.
 
 The AIR Bot Manager lists packaged Community bots and bots imported through the
-Android document picker. Its compact list is paged so every entry remains
-reachable without expanding the overlay. Imports are copied into
-application-owned storage, bounded by file and command limits, and parsed as
-JSON data without resolving Newtonsoft `$type` names. A successful import is
-selected immediately. Start, pause/resume, stop, refresh, and imported-bot
-removal are live. A cooperative mobile runner supports a foundational subset of
-legacy timing, join/movement, combat, skill, quest, inventory, label/index,
-stop/restart, and common statement conditions. An unknown command stops the run
-with its type in the visible status; this is not yet command-for-command parity
-with desktop.
+Android Storage Access Framework. A private native extension copies the chosen
+document into a bounded app-cache file, after which the existing JSON and
+command limits are applied before it reaches application-owned storage. The
+picker intentionally accepts unknown MIME types so `.gbot` files remain visible
+across Android file providers. A successful import is selected immediately.
+The paged manager can create, edit, reorder, duplicate, delete, and save legacy
+commands while preserving unknown fields and exact desktop `$type` identities.
+Start, pause/resume, stop, refresh, and imported-bot removal are live. A
+cooperative mobile runner supports a foundational subset of legacy timing,
+join/movement, combat, skill, quest, inventory, label/index, stop/restart, and
+common statement conditions. An unknown command stops the run with its type in
+the visible status; this is not yet command-for-command parity with desktop.
 
 The settings drawer persists General, Key Bindings, and Advanced preferences.
 Mobile adaptations include start-in-focus, status visibility, back-button exit
@@ -88,6 +92,14 @@ confirmation, reduced motion, keep-awake, 30/60 FPS, render quality, hardware
 F-key shortcuts, login-field clearing, app-owned settings reset, and an official
 GitHub mobile-release check. Android has no desktop tray behavior, so it is not
 presented as a mobile option.
+
+Runner is off by default. When enabled, AIR background execution is paired with
+an Android foreground service whose persistent notification shows only generic
+idle/running/paused/stopped state. Optional stop notices also contain no player,
+bot, map, room, or packet details. Balanced mode holds no CPU wake lock; the
+explicit reliable mode holds a partial wake lock only while a bot is running.
+The Runner page links to Android's per-app battery settings for users who need
+to review device-specific restrictions.
 
 The profile card remains anonymous until AQW confirms `loadInventoryBig`, then
 reads the authenticated character name and any available level/class data from
@@ -107,10 +119,10 @@ only behind compatibility fixtures and live-client validation.
 
 ## Validation status
 
-The bootstrap has been smoke-tested with AIR Debug Launcher in the mobile
-profile: it retrieved the live version metadata, downloaded the current AQW SWF
-to 100%, initialized the client, and loaded the login-screen background and
-title. The APK manifest and arm64 payload have also been inspected and its APK
-Signature Scheme v2 signature verified. A physical Android device or configured
-emulator is still required to validate rendering, touch input, login, sockets,
-system-bar behavior, pause/resume, and long-session stability on Android.
+The debug APK has been exercised on an Android emulator: it retrieved live AQW
+metadata, downloaded and initialized the current client, rendered the real login
+surface, opened Android Files, displayed and imported a synthetic `.gbot`, and
+opened that document in the command editor. The APK manifest and arm64 payload
+have also been inspected. An authenticated device pass is still required to
+verify live map/entity alignment, Ciel visibility, sockets, bot execution, and
+long-session stability before release.

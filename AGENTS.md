@@ -46,10 +46,13 @@ This project maintains a Graphify graph in `graphify-out/`.
 - Preserve legacy GBot command names, property meanings, order, and safe defaults.
 - Unknown commands must stop visibly; never dynamically resolve Newtonsoft
   `$type` names.
-- Keep AQW at origin `(0,0)`, scale `1`, and on the direct AIR Stage. Do not
-  reintroduce transformed pointer coordinates.
-- The overlay may cover the logical Stage with translucent chrome but must leave
-  the game readable and Ciel accessible after closing it.
+- Keep AQW as a direct AIR Stage child at native origin and scale. Use
+  `StageScaleMode.SHOW_ALL` as the only aspect-preserving transform because AQW
+  may add map and entity layers beside its root clip on Stage. Never transform
+  only the game clip or compensate pointer coordinates manually.
+- Keep the ActionScript overlay on AQW's logical 960×550 Stage plane. Physical
+  letterbox decoration requires an Android-native overlay; do not trade client,
+  map, or touch alignment for ActionScript coverage outside the game plane.
 - Keep Ciel hidden before authentication, draggable while the overlay is closed,
   and bounded to the playable Stage.
 - Keep packet history and UI text bounded.

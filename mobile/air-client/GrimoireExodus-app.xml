@@ -24,6 +24,11 @@
 
     <supportedProfiles>mobileDevice extendedMobileDevice</supportedProfiles>
 
+    <extensions>
+        <extensionID>com.unknownsecurity.grimoireexodus.mobile.documentpicker</extensionID>
+        <extensionID>com.unknownsecurity.grimoireexodus.mobile.runner</extensionID>
+    </extensions>
+
     <icon>
         <image48x48>icons/icon48.png</image48x48>
         <image72x72>icons/icon72.png</image72x72>
@@ -37,6 +42,10 @@
             <manifest android:installLocation="auto">
                 <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
                 <uses-permission android:name="android.permission.INTERNET"/>
+                <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+                <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+                <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+                <uses-permission android:name="android.permission.WAKE_LOCK"/>
                 <uses-feature android:name="android.hardware.screen.landscape" android:required="true"/>
                 <uses-feature android:name="android.hardware.touchscreen" android:required="true"/>
                 <application
@@ -52,6 +61,20 @@
                             <category android:name="android.intent.category.LAUNCHER"/>
                         </intent-filter>
                     </activity>
+                    <activity
+                        android:name="com.unknownsecurity.grimoireexodus.documentpicker.DocumentPickerActivity"
+                        android:exported="false"
+                        android:excludeFromRecents="true"
+                        android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+                    <service
+                        android:name="com.unknownsecurity.grimoireexodus.runner.RunnerForegroundService"
+                        android:exported="false"
+                        android:foregroundServiceType="specialUse"
+                        android:stopWithTask="false">
+                        <property
+                            android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                            android:value="Maintains a user-enabled automation session while another app is foregrounded."/>
+                    </service>
                 </application>
             </manifest>
         ]]></manifestAdditions>

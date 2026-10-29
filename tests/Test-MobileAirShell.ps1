@@ -6,9 +6,19 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $rootPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\Root.as'
 $shellPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\MobileShell.as'
 $botLibraryPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\MobileBotLibrary.as'
+$botEditorPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\MobileBotEditor.as'
 $botRunnerPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\MobileBotRunner.as'
 $preferencesPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\MobilePreferences.as'
+$runnerBridgePath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\actionscript\grimoire\nativebridge\AndroidRunnerBridge.as'
+$runnerContextPath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\native\src\com\unknownsecurity\grimoireexodus\runner\RunnerContext.java'
+$runnerServicePath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\native\src\com\unknownsecurity\grimoireexodus\runner\RunnerForegroundService.java'
+$runnerExtensionPath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\extension.xml'
+$pickerBridgePath = Join-Path $repositoryRoot 'mobile\air-client\document-picker-ane\actionscript\grimoire\nativebridge\AndroidDocumentPicker.as'
+$pickerActivityPath = Join-Path $repositoryRoot 'mobile\air-client\document-picker-ane\native\src\com\unknownsecurity\grimoireexodus\documentpicker\DocumentPickerActivity.java'
+$pickerBuildPath = Join-Path $repositoryRoot 'mobile\air-client\document-picker-ane\build-document-picker-ane.ps1'
+$pickerExtensionPath = Join-Path $repositoryRoot 'mobile\air-client\document-picker-ane\extension.xml'
 $legacyFixturePath = Join-Path $repositoryRoot 'shared\fixtures\gbot\v1\legacy-delay.gbot'
+$legacyLevelingFixturePath = Join-Path $repositoryRoot 'shared\fixtures\gbot\v1\legacy-leveling-loop.gbot'
 $descriptorPath = Join-Path $repositoryRoot 'mobile\air-client\GrimoireExodus-app.xml'
 $buildScriptPath = Join-Path $repositoryRoot 'mobile\air-client\build-air.ps1'
 $mobileBuildScriptPath = Join-Path $repositoryRoot 'mobile\build-android.ps1'
@@ -61,9 +71,19 @@ function Get-MobileCommandTypeNames {
 $rootSource = Get-Content -Raw $rootPath
 $shellSource = Get-Content -Raw $shellPath
 $botLibrarySource = Get-Content -Raw $botLibraryPath
+$botEditorSource = Get-Content -Raw $botEditorPath
 $botRunnerSource = Get-Content -Raw $botRunnerPath
 $preferencesSource = Get-Content -Raw $preferencesPath
+$runnerBridgeSource = if (Test-Path -LiteralPath $runnerBridgePath) { Get-Content -Raw $runnerBridgePath } else { '' }
+$runnerContextSource = if (Test-Path -LiteralPath $runnerContextPath) { Get-Content -Raw $runnerContextPath } else { '' }
+$runnerServiceSource = if (Test-Path -LiteralPath $runnerServicePath) { Get-Content -Raw $runnerServicePath } else { '' }
+$runnerExtensionSource = if (Test-Path -LiteralPath $runnerExtensionPath) { Get-Content -Raw $runnerExtensionPath } else { '' }
+$pickerBridgeSource = Get-Content -Raw $pickerBridgePath
+$pickerActivitySource = Get-Content -Raw $pickerActivityPath
+$pickerBuildSource = Get-Content -Raw $pickerBuildPath
+$pickerExtensionSource = Get-Content -Raw $pickerExtensionPath
 $legacyFixture = Get-Content -Raw $legacyFixturePath | ConvertFrom-Json -Depth 100
+$legacyLevelingFixture = Get-Content -Raw $legacyLevelingFixturePath | ConvertFrom-Json -Depth 100
 $descriptorSource = Get-Content -Raw $descriptorPath
 $buildScriptSource = Get-Content -Raw $buildScriptPath
 $mobileBuildScriptSource = Get-Content -Raw $mobileBuildScriptPath
@@ -81,15 +101,45 @@ Assert-Contract (($mobileBuildScriptSource -match '\[string\]\s*\$Engine\s*=\s*'
     ($mobileBuildScriptSource -match 'if \(\$Engine -eq ''Air''\)') -and
     ($mobileBuildScriptSource -match 'air-client\\build-air\.ps1')) `
     'The canonical Android build entry point must default to the HARMAN AIR client.'
+Assert-Contract (($botLibrarySource -match 'import\s+grimoire\.nativebridge\.AndroidDocumentPicker') -and
+    ($botLibrarySource -match 'private\s+var\s+picker:AndroidDocumentPicker') -and
+    ($botLibrarySource -match 'this\.picker\.browse\(\)') -and
+    ($botLibrarySource -notmatch 'browseForOpen|FileReference|new FileFilter') -and
+    ($botLibrarySource -match 'readFileText\(selectedFile\)') -and
+    ($botLibrarySource -match 'parseDocument\(raw\)')) `
+    'Android bot import must use the native Storage Access Framework bridge and validate the selected file before copying it.'
+Assert-Contract (($descriptorSource -match '<extensionID>com\.unknownsecurity\.grimoireexodus\.mobile\.documentpicker</extensionID>') -and
+    ($descriptorSource -match 'android:name="com\.unknownsecurity\.grimoireexodus\.documentpicker\.DocumentPickerActivity"') -and
+    ($descriptorSource -match 'android:exported="false"')) `
+    'The AIR application descriptor must register the private picker Activity and native extension.'
+Assert-Contract (($buildScriptSource -match 'build-document-picker-ane\.ps1') -and
+    ($buildScriptSource -match 'external-library-path\+=\$documentPickerAne') -and
+    ($buildScriptSource -match '-extdir\s+\$extensionDirectory')) `
+    'The AIR build must compile against and package the document picker ANE.'
+Assert-Contract (($pickerBridgeSource -match 'ExtensionContext\.createExtensionContext') -and
+    ($pickerBridgeSource -match 'context\.call\("browse"\)') -and
+    ($pickerBridgeSource -match 'StatusEvent\.STATUS')) `
+    'The ActionScript picker bridge must use a bounded native extension context.'
+Assert-Contract (($pickerActivitySource -match 'Intent\.ACTION_OPEN_DOCUMENT') -and
+    ($pickerActivitySource -match 'intent\.setType\("\*/\*"\)') -and
+    ($pickerActivitySource -notmatch 'EXTRA_MIME_TYPES') -and
+    ($pickerActivitySource -match 'MAX_BYTES\s*=\s*2L\s*\*\s*1024L\s*\*\s*1024L')) `
+    'The native picker must show unknown .gbot documents and enforce the mobile size limit after selection.'
+Assert-Contract (($pickerExtensionSource -match '<platform name="Android-ARM64">') -and
+    ($pickerBuildSource -match '-platform\s+Android-ARM64')) `
+    'The document picker ANE must provide the implementation required by the arm64 APK target.'
 
-Assert-Contract ($rootSource -match 'StageScaleMode\.SHOW_ALL') `
-    'AIR must preserve AQW''s native 960x550 aspect ratio on every Android display.'
+Assert-Contract ($rootSource -notmatch 'StageScaleMode\.NO_SCALE') `
+    'AIR must not expose a second physical coordinate plane that AQW Stage children can bypass.'
 Assert-Contract ($rootSource -notmatch 'StageScaleMode\.EXACT_FIT') `
     'AIR must not stretch AQW independently across the physical X and Y axes.'
-Assert-Contract ($rootSource -notmatch 'StageScaleMode\.NO_SCALE') `
-    'AIR must not expose physical Android coordinates to the legacy AQW input path.'
-Assert-Contract ($rootSource -match 'stage\.align\s*=\s*""') `
-    'AIR must center any aspect-ratio letterboxing around the native AQW plane.'
+Assert-Contract ([regex]::Matches($rootSource, 'StageScaleMode\.SHOW_ALL').Count -eq 2) `
+    'Desktop and Android must both use the shared Stage transform so AQW map layers and input stay aligned.'
+Assert-Contract ($rootSource -notmatch 'layoutMobileGame') `
+    'AIR must not apply a child-only transform to AQW while its runtime can add sibling layers to Stage.'
+Assert-Contract (($rootSource -notmatch 'Game\.scale[XY]\s*=') -and
+    ($rootSource -notmatch 'Game\.[xy]\s*=')) `
+    'Root must leave AQW at its native 960x550 coordinates and let SHOW_ALL transform the complete Stage.'
 Assert-Contract ($rootSource -match '(?:stage|this\.stg)\.addChild(?:At)?\(Game') `
     'The live AQW display must remain a direct Stage child.'
 $removeLoadingIndex = $rootSource.IndexOf('this.removeLoadingSurface();', [StringComparison]::Ordinal)
@@ -118,28 +168,23 @@ Assert-Contract ($shellSource -match '(?:this\.)?game\.scrollRect\s*=\s*new\s+Re
     'AQW must be clipped to its native 960x550 coordinate space.'
 Assert-Contract (($shellSource -notmatch 'VIEW_WIDTH') -and ($shellSource -notmatch 'VIEW_HEIGHT')) `
     'The game viewport must not regress to fixed 960x550-era dimensions.'
-Assert-Contract (($shellSource -match 'this\.game\.x\s*=\s*0') -and
-    ($shellSource -match 'this\.game\.y\s*=\s*0') -and
-    ($shellSource -match 'this\.game\.scaleX\s*=\s*this\.game\.scaleY\s*=\s*1')) `
-    'AQW must stay at its native Stage origin and scale for accurate touch input.'
-$invalidGameTransforms = @($shellSource -split "`r?`n" | Where-Object {
-    ($_ -match 'this\.game\.[xy]\s*=') -and ($_ -notmatch 'this\.game\.[xy]\s*=\s*0(?:\.0)?\s*;')
-}) + @($shellSource -split "`r?`n" | Where-Object {
-    ($_ -match 'this\.game\.scale[XY]\s*=') -and
-    ($_ -notmatch 'this\.game\.scaleX\s*=\s*this\.game\.scaleY\s*=\s*1(?:\.0)?\s*;')
-})
-Assert-Contract ($invalidGameTransforms.Count -eq 0) `
-    'No mobile layout or animation path may translate or scale the AQW display object.'
 Assert-Contract ($shellSource -notmatch 'targetGame(?:X|Y|Scale)') `
     'Chrome layout must not maintain a second transformed AQW coordinate plane.'
+Assert-Contract (($shellSource -match 'setViewportSize\(width:Number,\s*height:Number\)') -and
+    ($shellSource -match 'this\.interfaceScale\s*=\s*1') -and
+    ($shellSource -match 'this\.layoutWidth\s*=\s*DESIGN_WIDTH') -and
+    ($shellSource -match 'this\.layoutHeight\s*=\s*DESIGN_HEIGHT') -and
+    ($shellSource -match 'this\.rightRailX\s*=\s*RIGHT_RAIL_X')) `
+    'MobileShell must share AQW''s logical Stage plane without introducing a second scale.'
 Assert-Contract (($shellSource -match 'CIEL_X:Number\s*=\s*924') -and
     ($shellSource -match 'CIEL_Y:Number\s*=\s*36') -and
     ($shellSource -match 'this\.toggleButton\.visible\s*=\s*this\.gameConnected\s*&&\s*!this\.chromeVisible')) `
     'Ciel must occupy the top-right corner and appear only in-game while the overlay is closed.'
-Assert-Contract (($shellSource -match '"bot_stop",\s*"STOP",\s*194,\s*270,\s*90,\s*28') -and
+Assert-Contract (($shellSource -match '"bot_edit",\s*"EDIT",\s*0,\s*270,\s*90,\s*28') -and
+    ($shellSource -match '"bot_command_delete",\s*"DELETE",\s*216,\s*281,\s*68,\s*27') -and
     ($shellSource -match '4,\s*316,\s*272,\s*17') -and
     ($shellSource -match 'maximumBotPageStart\(this\.botLibrary\.entries\.length\)')) `
-    'Bot controls and the status strip must remain inside the shortened sidebar below Ciel.'
+    'Bot library and editor controls plus the status strip must remain inside the shortened sidebar below Ciel.'
 Assert-Contract ($shellSource -match 'this\.chrome\.addChild\(this\.background\)') `
     'Opaque shell artwork must be contained by the fading chrome overlay.'
 Assert-Contract (($shellSource -match 'beginFill\(CANVAS,\s*0\.42\)') -and
@@ -214,10 +259,42 @@ Assert-Contract (($botLibrarySource -match 'MAX_BOT_BYTES') -and
     ($botLibrarySource -match 'MAX_COMMANDS') -and
     ($botLibrarySource -notmatch 'getDefinitionByName|ApplicationDomain')) `
     'Mobile GBot loading must stay bounded and data-only.'
-Assert-Contract (($botLibrarySource -match 'this\.picker\.browse\(\)') -and
-    ($botLibrarySource -notmatch 'new FileFilter') -and
-    ($botLibrarySource -match 'bytes\.length\s*>\s*MAX_BOT_BYTES')) `
-    'Android bot import must open the unfiltered system picker and validate the selected payload after loading.'
+Assert-Contract (($botEditorSource -match 'Grimoire\.Botting\.Configuration, Grimoire, Version=1\.0\.0\.0') -and
+    ($botEditorSource -match 'System\.Collections\.Generic\.List`1\[\[Grimoire\.Botting\.IBotCommand, Grimoire') -and
+    ($botEditorSource -match 'Commands\["\$values"\]') -and
+    ($botEditorSource -match 'delete\s+copy\.mobileCommands')) `
+    'The mobile editor must preserve the desktop configuration/list identity and remove runtime-only fields when saving.'
+Assert-Contract (($botEditorSource -match 'function\s+addTemplate') -and
+    ($botEditorSource -match 'function\s+moveSelected') -and
+    ($botEditorSource -match 'function\s+duplicateSelected') -and
+    ($botEditorSource -match 'function\s+deleteSelected') -and
+    ($botEditorSource -match 'function\s+setSelectedProperty') -and
+    ($botEditorSource -match 'MAX_COMMANDS')) `
+    'The mobile editor must support bounded add, reorder, duplicate, delete, and property editing operations.'
+foreach ($requiredTemplate in @('CmdKill', 'CmdKillFor', 'CmdJoin', 'CmdJoin2', 'CmdMoveToCell',
+        'CmdUseSkill', 'CmdAcceptQuest2', 'CmdCompleteQuest2', 'CmdDelay', 'CmdGetDrop')) {
+    Assert-Contract ($botEditorSource -match [regex]::Escape($requiredTemplate)) `
+        "The mobile editor template catalog must include $requiredTemplate."
+}
+Assert-Contract (($botLibrarySource -match 'function\s+saveEditedBot') -and
+    ($botLibrarySource -match 'File\.applicationStorageDirectory\.resolvePath\("Bots"\)') -and
+    ($botLibrarySource -match 'this\.parseDocument\(serialized\)') -and
+    ($botLibrarySource -match 'entry\.community') -and
+    ($botLibrarySource -match 'JSON\.stringify')) `
+    'Edited bots must be revalidated and saved only in app-owned storage, with Community bots copied before editing.'
+Assert-Contract (($botLibrarySource -match 'function\s+serializeLegacyJson') -and
+    ($botLibrarySource -match 'if\s*\(key\s*==\s*"\$type"\)\s*return\s+0') -and
+    ($botLibrarySource -match 'keys\.sort\(this\.compareLegacyJsonKeys\)') -and
+    ($botLibrarySource -match 'key\s*!=\s*"mobileCommands"')) `
+    'Saved GBot JSON must emit Newtonsoft metadata first and omit the mobile runtime command alias.'
+Assert-Contract (($shellSource -match 'new\s+MobileBotEditor\(\)') -and
+    ($shellSource -match 'bot_new') -and
+    ($shellSource -match 'bot_edit') -and
+    ($shellSource -match 'bot_add_command') -and
+    ($shellSource -match 'bot_save') -and
+    ($shellSource -match 'bot_command_duplicate') -and
+    ($shellSource -match 'bot_property_')) `
+    'The AIR overlay must expose the complete mobile Bot Manager editing workflow.'
 Assert-Contract (($botLibrarySource -match 'selectPath\(destination\.url') -and
     ($botLibrarySource -match 'private function selectPath\(path:String')) `
     'A successfully imported bot must become the selected bot so Start works immediately.'
@@ -232,11 +309,53 @@ Assert-Contract (($botRunnerSource -match 'document\.BotDelay\s*==\s*null\s*\?\s
     ($botRunnerSource -match 'case\s+"CmdMapIs"') -and
     ($botRunnerSource -match 'case\s+"CmdQuestInProgress"')) `
     'The mobile runner must use a safe default delay and support foundational legacy statement flow.'
+$mobileSafeLegacyCommands = @(
+    'CmdSkillSet', 'CmdClearTemp', 'CmdSetVar', 'CmdUpdateVar', 'CmdGetClassWithVar', 'CmdInt',
+    'CmdIntIs', 'CmdIntIsNot', 'CmdIntGreaterThan', 'CmdIntLessThan', 'CmdIntEqualInt', 'CmdIntNotEqualInt',
+    'CmdBankList', 'CmdBankSwap', 'CmdBankTransfer', 'CmdBuyByID', 'CmdBuyFast', 'CmdBuyFastByID',
+    'CmdLoad', 'CmdLoad2', 'CmdMapItem', 'CmdMapItem2', 'CmdSell', 'CmdUseBoost', 'CmdLoadMapSwf',
+    'CmdWhitelist', 'CmdQuestlist', 'CmdEquipped', 'CmdNotEquipped', 'CmdInBank', 'CmdNotInBank',
+    'CmdInHouse', 'CmdNotInHouse', 'CmdItemPickupable', 'CmdItemNotPickupable', 'CmdListInInv',
+    'CmdAvailableMonstersGreaterThan', 'CmdAvailableMonstersLessThan',
+    'CmdVisibleMonstersGreaterThan', 'CmdVisibleMonstersLessThan',
+    'CmdMonsterHealthGreaterThan', 'CmdMonsterHealthLessThan',
+    'CmdPlayersGreaterThan', 'CmdPlayersLessThan', 'CmdPlayersInCellGreaterThan',
+    'CmdPlayersInCellLessThan', 'CmdPlayersInMyCellGreaterThan', 'CmdPlayersInMyCellLessThan',
+    'CmdPlayerInRoom', 'CmdPlayerNotInRoom', 'CmdPlayerIsInCell', 'CmdPlayerIsNotInCell',
+    'CmdPlayerIsInMyCell', 'CmdPlayerIsNotInMyCell', 'CmdPlayerInCombat', 'CmdPlayerNotInCombat',
+    'CmdPlayerEquippedClass', 'CmdPlayerNotEquippedClass',
+    'CmdPlayerAuraIsActive', 'CmdPlayerAuraIsNotActive', 'CmdPlayerAuraStringValIs',
+    'CmdPlayerAuraStringValIsNot', 'CmdPlayerAuraValIs', 'CmdPlayerAuraValIsNot',
+    'CmdPlayerAuraValIsGreaterThan', 'CmdPlayerAuraValIsLessThan',
+    'CmdTargetAuraIsActive', 'CmdTargetAuraIsNotActive', 'CmdTargetAuraStringValIs',
+    'CmdTargetAuraStringValIsNot', 'CmdTargetAuraValIs', 'CmdTargetAuraValIsNot',
+    'CmdTargetAuraValIsGreaterThan', 'CmdTargetAuraValIsLessThan'
+)
+foreach ($commandType in $mobileSafeLegacyCommands) {
+    Assert-Contract ($botRunnerSource -match ('case\s+"' + [regex]::Escape($commandType) + '"')) `
+        "The safe mobile legacy command contract is missing $commandType."
+}
+foreach ($desktopOnlyCommand in @('CmdBuyBack', 'CmdEquipSet', 'CmdLoadBot', 'CmdReturn')) {
+    Assert-Contract ($botRunnerSource -notmatch ('case\s+"' + [regex]::Escape($desktopOnlyCommand) + '"')) `
+        "$desktopOnlyCommand must remain fail-closed until its desktop-only file/runtime dependency has a bounded mobile contract."
+}
 $fixtureCommandType = [string]$legacyFixture.Commands.'$values'[0].'$type'
 $fixtureCommandName = (($fixtureCommandType -split ',')[0] -split '\.')[-1]
 Assert-Contract (($legacyFixture.'$type' -like 'Grimoire.Botting.Configuration,*') -and
     ($botRunnerSource -match ('case\s+"' + [regex]::Escape($fixtureCommandName) + '"'))) `
     'The shared legacy compatibility fixture must be recognized by the mobile runner.'
+$levelingCommandTypes = @(Get-MobileCommandTypeNames -Node $legacyLevelingFixture | Sort-Object -Unique)
+Assert-Contract (($legacyLevelingFixture.'$type' -like 'Grimoire.Botting.Configuration,*') -and
+    ($levelingCommandTypes.Count -gt 0)) `
+    'The synthetic looping level-up fixture must retain legacy desktop command identities.'
+foreach ($commandType in $levelingCommandTypes) {
+    Assert-Contract ($botRunnerSource -match ('case\s+"' + [regex]::Escape($commandType) + '"')) `
+        "The looping level-up compatibility fixture uses unsupported command $commandType."
+}
+Assert-Contract (($botRunnerSource -match 'private\s+function\s+restartCommandLoop\(\):void') -and
+    ($botRunnerSource -match 'if\s*\(this\.index\s*>=\s*this\.commands\.length\)\s*\{\s*this\.restartCommandLoop\(\);\s*return;\s*\}') -and
+    ($botRunnerSource -notmatch 'this\.stop\("BOT COMPLETED"\)')) `
+    'A running legacy farming bot must restart at the first command instead of stopping at the end of the list.'
 
 $communityBotDirectory = Join-Path $repositoryRoot 'app\Bot'
 if (Test-Path -LiteralPath $communityBotDirectory -PathType Container) {
@@ -284,11 +403,66 @@ $topNavigation = [regex]::Match(
 Assert-Contract ($topNavigation.Success -and
     ($topNavigation.Value -notmatch '"GRIMOIRE"|"EXODUS"|MOBILE COMMAND CENTER')) `
     'The Android top bar must not render a Grimoire title block.'
-Assert-Contract (($shellSource -match '\["Home", "Bot", "Bank", "Options", "Packet", "Tools"\]') -and
+Assert-Contract (($shellSource -match '\["Home", "Bot", "Bank", "Options", "Packet", "Tools", "Runner"\]') -and
     ($shellSource -match 'HostBridge\.invoke\("ShowBank"\)') -and
     ($shellSource -match 'renderOptions\(\)') -and
     ($shellSource -match 'renderPackets\(\)')) `
     'The mobile top bar must expose Bank, Options, Packet, Tools, and Bot surfaces.'
+Assert-Contract (($shellSource -match 'this\.sidebarContent\.y\s*=\s*148') -and
+    ($shellSource -notmatch 'this\.sidebarContent\.y\s*=\s*208')) `
+    'The selected page title must sit directly below the profile card without the former oversized gap.'
+Assert-Contract (($shellSource -match '\["Home", "Bot", "Bank", "Options", "Packet", "Tools", "Runner"\]') -and
+    ($shellSource -match 'renderRunner\(\)') -and
+    ($shellSource -match 'label\s*==\s*"Runner"')) `
+    'The AIR overlay must expose the mobile-only Runner surface in the top navigation.'
+Assert-Contract (($shellSource -notmatch 'createHeaderAction\("settings"') -and
+    ($shellSource -notmatch 'header_settings') -and
+    ($shellSource -match 'createHeaderAction\("close",\s*916,\s*21')) `
+    'The unused icon beside Close must be absent and the Close icon must be vertically centered.'
+Assert-Contract (($preferencesSource -match 'runnerEnabled') -and
+    ($preferencesSource -match 'runnerStopNotifications') -and
+    ($preferencesSource -match 'runnerKeepCpuAwake') -and
+    ($preferencesSource -match 'executeInBackground\s*=\s*this\.runnerEnabled')) `
+    'Runner preferences must persist background execution, stop notices, and an opt-in CPU wake mode.'
+Assert-Contract (($shellSource -match 'AndroidRunnerBridge') -and
+    ($shellSource -match 'runner_enabled') -and
+    ($shellSource -match 'runner_stop_notifications') -and
+    ($shellSource -match 'runner_keep_cpu_awake') -and
+    ($shellSource -match 'runner_battery_settings') -and
+    ($shellSource -match 'syncRunnerStatus\(\)')) `
+    'The Runner screen must control the native foreground service and expose battery-conscious settings.'
+Assert-Contract (($runnerBridgeSource -match 'ExtensionContext\.createExtensionContext') -and
+    ($runnerBridgeSource -match 'context\.call\("configure"') -and
+    ($runnerBridgeSource -match 'context\.call\("updateStatus"') -and
+    ($runnerBridgeSource -match 'context\.call\("openBatterySettings"')) `
+    'The ActionScript Runner bridge must expose only the bounded foreground-service operations.'
+Assert-Contract (($runnerContextSource -match 'functions\.put\("configure"') -and
+    ($runnerContextSource -match 'functions\.put\("updateStatus"') -and
+    ($runnerContextSource -match 'functions\.put\("openBatterySettings"') -and
+    ($runnerContextSource -notmatch 'botName|account|username|packet|room')) `
+    'The native Runner context must not receive private game or bot details.'
+Assert-Contract (($runnerServiceSource -match 'startForeground') -and
+    ($runnerServiceSource -match 'NotificationChannel') -and
+    ($runnerServiceSource -match 'PARTIAL_WAKE_LOCK') -and
+    ($runnerServiceSource -match 'keepCpuAwake\s*&&\s*STATE_RUNNING\.equals\(currentState\)') -and
+    ($runnerServiceSource -match 'isActive\(previous\)') -and
+    ($runnerServiceSource -match 'releaseWakeLock\(\)') -and
+    ($runnerServiceSource -match 'notifyStops') -and
+    ($runnerServiceSource -match 'STATE_RUNNING') -and
+    ($runnerServiceSource -notmatch 'botName|account|username|packet|room')) `
+    'The Android foreground service must publish generic status, optional stop notices, and acquire a wake lock only for active runs.'
+Assert-Contract (($runnerExtensionSource -match '<platform name="Android-ARM64">') -and
+    ($descriptorSource -match '<extensionID>com\.unknownsecurity\.grimoireexodus\.mobile\.runner</extensionID>') -and
+    ($descriptorSource -match 'android\.permission\.FOREGROUND_SERVICE') -and
+    ($descriptorSource -match 'android\.permission\.POST_NOTIFICATIONS') -and
+    ($descriptorSource -match 'android\.permission\.WAKE_LOCK') -and
+    ($descriptorSource -match 'android:name="com\.unknownsecurity\.grimoireexodus\.runner\.RunnerForegroundService"') -and
+    ($descriptorSource -match 'android:foregroundServiceType="specialUse"')) `
+    'The APK descriptor must package the arm64 Runner extension and declare its modern Android service contract.'
+Assert-Contract (($buildScriptSource -match 'build-runner-service-ane\.ps1') -and
+    ($buildScriptSource -match 'external-library-path\+=\$runnerServiceAne') -and
+    ($buildScriptSource -match 'GrimoireRunnerService\.ane')) `
+    'The canonical AIR build must compile against and package the Runner foreground-service ANE.'
 Assert-Contract (($shellSource -match 'MAX_PACKET_ENTRIES:int\s*=\s*40') -and
     ($shellSource -match 'MAX_PACKET_CHARACTERS:int\s*=\s*320') -and
     ($shellSource -match 'sendServerPacket') -and

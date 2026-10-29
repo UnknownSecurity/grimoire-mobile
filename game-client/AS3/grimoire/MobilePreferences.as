@@ -22,6 +22,9 @@ package grimoire
         public var confirmExit:Boolean;
         public var reducedMotion:Boolean;
         public var keepAwake:Boolean;
+        public var runnerEnabled:Boolean;
+        public var runnerStopNotifications:Boolean;
+        public var runnerKeepCpuAwake:Boolean;
         public var frameRate:int;
         public var quality:String;
         public var cielX:Number;
@@ -42,6 +45,9 @@ package grimoire
             this.confirmExit = this.readBoolean(data.confirmExit, true);
             this.reducedMotion = this.readBoolean(data.reducedMotion, false);
             this.keepAwake = this.readBoolean(data.keepAwake, true);
+            this.runnerEnabled = this.readBoolean(data.runnerEnabled, false);
+            this.runnerStopNotifications = this.readBoolean(data.runnerStopNotifications, true);
+            this.runnerKeepCpuAwake = this.readBoolean(data.runnerKeepCpuAwake, false);
             this.frameRate = this.readInteger(data.frameRate, 30, 20, 60);
             this.quality = this.readQuality(data.quality);
             this.cielX = this.readNumber(data.cielX, -1, 24, 936);
@@ -57,6 +63,9 @@ package grimoire
             data.confirmExit = this.confirmExit;
             data.reducedMotion = this.reducedMotion;
             data.keepAwake = this.keepAwake;
+            data.runnerEnabled = this.runnerEnabled;
+            data.runnerStopNotifications = this.runnerStopNotifications;
+            data.runnerKeepCpuAwake = this.runnerKeepCpuAwake;
             data.frameRate = this.frameRate;
             data.quality = this.quality;
             data.cielX = this.cielX;
@@ -87,6 +96,13 @@ package grimoire
 
         public function apply(stage:Stage):void
         {
+            try
+            {
+                NativeApplication.nativeApplication.executeInBackground = this.runnerEnabled;
+            }
+            catch (backgroundError:Error)
+            {
+            }
             if (stage == null)
             {
                 return;

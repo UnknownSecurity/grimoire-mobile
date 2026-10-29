@@ -20,6 +20,11 @@ $distRoot = Join-Path $repositoryRoot "dist"
 $actionScriptRoot = Join-Path $repositoryRoot "game-client\AS3"
 $mainSource = Join-Path $actionScriptRoot "grimoire\Root.as"
 $descriptorSource = Join-Path $airClientRoot "GrimoireExodus-app.xml"
+$documentPickerBuild = Join-Path $airClientRoot "document-picker-ane\build-document-picker-ane.ps1"
+$runnerServiceBuild = Join-Path $airClientRoot "runner-service-ane\build-runner-service-ane.ps1"
+$extensionDirectory = Join-Path $buildRoot "extensions"
+$documentPickerAne = Join-Path $extensionDirectory "GrimoireDocumentPicker.ane"
+$runnerServiceAne = Join-Path $extensionDirectory "GrimoireRunnerService.ane"
 $emblemSource = Join-Path $repositoryRoot "mobile\app\src\main\res\drawable-nodpi\grimoire_emblem.png"
 $bannerSource = Join-Path $repositoryRoot "mobile\app\src\main\res\drawable-nodpi\grimoire_banner.png"
 $cielSkillSource = Join-Path $airClientRoot "assets\ciel_skill.png"
@@ -54,10 +59,19 @@ if ([string]::IsNullOrWhiteSpace($AirSdkHome)) {
 $AirSdkHome = [IO.Path]::GetFullPath($AirSdkHome)
 $compiler = Join-Path $AirSdkHome "bin\amxmlc.bat"
 $packager = Join-Path $AirSdkHome "bin\adt.bat"
-foreach ($requiredPath in @($compiler, $packager, $mainSource, $descriptorSource, $emblemSource, $bannerSource, $cielSkillSource)) {
+foreach ($requiredPath in @($compiler, $packager, $mainSource, $descriptorSource, $documentPickerBuild, $runnerServiceBuild, $emblemSource, $bannerSource, $cielSkillSource)) {
     if (-not (Test-Path $requiredPath -PathType Leaf)) {
         throw "Required build input is missing: $requiredPath"
     }
+}
+
+& $documentPickerBuild -AirSdkHome $AirSdkHome
+if (-not (Test-Path -LiteralPath $documentPickerAne -PathType Leaf)) {
+    throw "The Android document picker extension was not built."
+}
+& $runnerServiceBuild -AirSdkHome $AirSdkHome
+if (-not (Test-Path -LiteralPath $runnerServiceAne -PathType Leaf)) {
+    throw "The Android Runner extension was not built."
 }
 
 if ((Test-Path $stagingRoot) -and (Test-PathWithin $stagingRoot $buildRoot)) {
@@ -72,6 +86,8 @@ $swfPath = Join-Path $stagingRoot "GrimoireExodus.swf"
 $debugBuild = $Configuration -eq "Debug"
 & $compiler `
     "-source-path+=$actionScriptRoot" `
+    "-external-library-path+=$documentPickerAne" `
+    "-external-library-path+=$runnerServiceAne" `
     "-includes=grimoire.MobileShell" `
     "-debug=$($debugBuild.ToString().ToLowerInvariant())" `
     "-default-size=960,550" `
@@ -168,6 +184,7 @@ try {
         -storepass $KeystorePassword `
         $outputPath `
         "GrimoireExodus-app.xml" `
+        -extdir $extensionDirectory `
         "GrimoireExodus.swf" `
         "icons" `
         "assets" `

@@ -42,7 +42,7 @@ jobs:
           java-version: "17"
 
       - name: Validate, build, and publish
-        shell: powershell
+        shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           foreach ($required in @(

@@ -30,16 +30,16 @@ jobs:
           cache: gradle
 
       - name: Validate AIR and Ruffle contracts
-        shell: powershell
+        shell: pwsh
         run: |
           .\tests\Test-MobileAirShell.ps1
           .\tests\Test-MobileRuffle.ps1
 
       - name: Test and lint the Android workspace
-        shell: powershell
+        shell: pwsh
         working-directory: mobile
         run: .\gradlew.bat test :app:assembleDebug :app:lintDebug --no-daemon
 
       - name: Check repository whitespace
-        shell: powershell
+        shell: pwsh
         run: git diff --check

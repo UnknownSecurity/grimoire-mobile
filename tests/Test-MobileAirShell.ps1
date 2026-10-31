@@ -23,6 +23,7 @@ $descriptorPath = Join-Path $repositoryRoot 'mobile\air-client\GrimoireExodus-ap
 $buildScriptPath = Join-Path $repositoryRoot 'mobile\air-client\build-air.ps1'
 $mobileBuildScriptPath = Join-Path $repositoryRoot 'mobile\build-android.ps1'
 $cielAssetPath = Join-Path $repositoryRoot 'mobile\air-client\assets\ciel_skill.png'
+$versionPath = Join-Path $repositoryRoot 'VERSION'
 
 function Assert-Contract {
     param(
@@ -87,16 +88,18 @@ $legacyLevelingFixture = Get-Content -Raw $legacyLevelingFixturePath | ConvertFr
 $descriptorSource = Get-Content -Raw $descriptorPath
 $buildScriptSource = Get-Content -Raw $buildScriptPath
 $mobileBuildScriptSource = Get-Content -Raw $mobileBuildScriptPath
+$mobileVersion = (Get-Content -Raw $versionPath).Trim()
 
 Assert-Contract ($buildScriptSource -match 'Grimoire-Exodus-Android-AIR-') `
     'The default mobile APK must be unmistakably labeled as the HARMAN AIR build.'
 Assert-Contract (($descriptorSource -match '<id>com\.unknownsecurity\.grimoireexodus\.mobile</id>') -and
     ($descriptorSource -match '<name>Grimoire Exodus</name>')) `
     'The HARMAN AIR client must own the primary Grimoire Exodus Android identity.'
-Assert-Contract (($descriptorSource -match '<versionNumber>0\.5\.0</versionNumber>') -and
-    ($descriptorSource -match '<versionLabel>0\.5\.0</versionLabel>') -and
+Assert-Contract (($mobileVersion -match '^\d+\.\d+\.\d+$') -and
+    ($descriptorSource -match ('<versionNumber>' + [regex]::Escape($mobileVersion) + '</versionNumber>')) -and
+    ($descriptorSource -match ('<versionLabel>' + [regex]::Escape($mobileVersion) + '</versionLabel>')) -and
     ($buildScriptSource -match 'Join-Path \$repositoryRoot "VERSION"')) `
-    'The default AIR client must use the standalone mobile 0.5.0 version source.'
+    'The default AIR client must use the standalone mobile VERSION source.'
 Assert-Contract (($mobileBuildScriptSource -match '\[string\]\s*\$Engine\s*=\s*''Air''') -and
     ($mobileBuildScriptSource -match 'if \(\$Engine -eq ''Air''\)') -and
     ($mobileBuildScriptSource -match 'air-client\\build-air\.ps1')) `
@@ -192,6 +195,14 @@ Assert-Contract (($shellSource -match 'beginFill\(CANVAS,\s*0\.42\)') -and
     ($shellSource -match 'RIGHT_RAIL_X') -and
     ($shellSource -match 'renderRightRail\(section:String\)')) `
     'The overlay must use a translucent full-stage glass layer and a live right-side data rail.'
+Assert-Contract (($shellSource -match 'SIDEBAR_WIDTH:Number\s*=\s*332') -and
+    ($shellSource -match 'RIGHT_RAIL_X:Number\s*=\s*348') -and
+    ($shellSource -match 'animateSectionTransition\(\)')) `
+    'The wider command rail and live-context rail must form one connected, smoothly animated workspace.'
+Assert-Contract (($shellSource -match 'refreshNavigationAvailability\(\)') -and
+    ($shellSource -match 'nav_Bank') -and
+    ($shellSource -match 'button\.alpha\s*=\s*unavailable\s*\?\s*0\.35\s*:\s*1')) `
+    'Bank must be visibly disabled before the AQW session is authenticated.'
 Assert-Contract (($shellSource -notmatch 'createHeaderAction\("play"') -and
     ($shellSource -notmatch 'createHeaderAction\("stop"')) `
     'The non-functional play and record/stop icons must not occupy the top bar.'
@@ -335,9 +346,29 @@ foreach ($commandType in $mobileSafeLegacyCommands) {
     Assert-Contract ($botRunnerSource -match ('case\s+"' + [regex]::Escape($commandType) + '"')) `
         "The safe mobile legacy command contract is missing $commandType."
 }
-foreach ($desktopOnlyCommand in @('CmdBuyBack', 'CmdEquipSet', 'CmdLoadBot', 'CmdReturn')) {
+foreach ($mobileParityCommand in @('CmdBeep', 'CmdLoadBot', 'CmdReturn', 'CmdToggleProvokeInMap')) {
+    Assert-Contract ($botRunnerSource -match ('case\s+"' + [regex]::Escape($mobileParityCommand) + '"')) `
+        "The bounded mobile legacy command contract is missing $mobileParityCommand."
+}
+Assert-Contract (($botLibrarySource -match 'public\s+function\s+loadKnownDocument\(reference:String\):Object') -and
+    ($botLibrarySource -match 'normalizedBotReference\(reference\)') -and
+    ($botRunnerSource -match 'MAX_NESTED_BOTS:int\s*=\s*16') -and
+    ($botRunnerSource -match 'botResolver\(botReference\)') -and
+    ($shellSource -match 'new\s+MobileBotRunner\(this\.botLibrary\.loadKnownDocument\)')) `
+    'Nested bot loading must remain bounded and resolve only through the app-owned mobile bot library.'
+foreach ($desktopOnlyCommand in @('CmdBuyBack', 'CmdEquipSet')) {
     Assert-Contract ($botRunnerSource -notmatch ('case\s+"' + [regex]::Escape($desktopOnlyCommand) + '"')) `
         "$desktopOnlyCommand must remain fail-closed until its desktop-only file/runtime dependency has a bounded mobile contract."
+}
+$runnerCommandCases = [regex]::Matches($botRunnerSource, 'case\s+"(Cmd[^\"]+)"') |
+    ForEach-Object { $_.Groups[1].Value } |
+    Sort-Object -Unique
+$editorCommandNames = [regex]::Matches($botEditorSource, '\bCmd[A-Za-z0-9_]+\b') |
+    ForEach-Object Value |
+    Sort-Object -Unique
+foreach ($commandType in $runnerCommandCases) {
+    Assert-Contract ($editorCommandNames -contains $commandType) `
+        "The mobile Bot Manager cannot create or customize supported command $commandType."
 }
 $fixtureCommandType = [string]$legacyFixture.Commands.'$values'[0].'$type'
 $fixtureCommandName = (($fixtureCommandType -split ',')[0] -split '\.')[-1]
@@ -465,9 +496,10 @@ Assert-Contract (($buildScriptSource -match 'build-runner-service-ane\.ps1') -an
     'The canonical AIR build must compile against and package the Runner foreground-service ANE.'
 Assert-Contract (($shellSource -match 'MAX_PACKET_ENTRIES:int\s*=\s*40') -and
     ($shellSource -match 'MAX_PACKET_CHARACTERS:int\s*=\s*320') -and
+    ($shellSource -match 'packetCaptureEnabled:Boolean\s*=\s*false') -and
     ($shellSource -match 'sendServerPacket') -and
     ($rootSource -match 'public static function sendServerPacket\(packet:String\):void')) `
-    'Mobile packet capture and send must remain bounded and use the live SmartFox bridge.'
+    'Mobile packet capture must start paused, remain bounded, and use the live SmartFox bridge.'
 Assert-Contract (($botRunnerSource -match 'case\s+"CmdPacket"') -and
     ($botRunnerSource -match 'case\s+"CmdPacket2"') -and
     ($botRunnerSource -match 'case\s+"CmdPacketlist2"')) `

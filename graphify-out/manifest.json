@@ -12,10 +12,10 @@
     "semantic_hash": ""
   },
   "mobile/app/build.gradle.kts": {
-    "mtime": 1793236267.4041028,
-    "seen": 1793236956.842565,
-    "ast_hash": "a0c16a307fa36a126ef4816c11628fcf",
-    "semantic_hash": "a0c16a307fa36a126ef4816c11628fcf"
+    "mtime": 1793447802.5022707,
+    "seen": 1793447859.0503595,
+    "ast_hash": "9689ea76c4f6af4b8df1a0fb41fa756d",
+    "semantic_hash": ""
   },
   "mobile/app/src/main/assets/ruffle/core.ruffle.8b0acaf2b6de35352980.js": {
     "mtime": 1793163143.0247529,
@@ -234,16 +234,16 @@
     "semantic_hash": "f74a43274aef652f3edb1ab12299b90e"
   },
   "tests/Test-MobileAirShell.ps1": {
-    "mtime": 1793267146.326005,
-    "seen": 1793277310.4031794,
-    "ast_hash": "7981ef790ee5ce4e53388cbce946688b",
+    "mtime": 1793447904.8744116,
+    "seen": 1793448197.4015605,
+    "ast_hash": "e7b642397c048ecc155fbd6607307c0e",
     "semantic_hash": ""
   },
   "tests/Test-MobileRuffle.ps1": {
-    "mtime": 1793236274.509891,
-    "seen": 1793236956.842617,
-    "ast_hash": "5e1aaea0234b5627e83c406dc2da110e",
-    "semantic_hash": "5e1aaea0234b5627e83c406dc2da110e"
+    "mtime": 1793447905.9233687,
+    "seen": 1793448197.4015632,
+    "ast_hash": "9bbf14e4e6450ec1d3d4f0849ab7a189",
+    "semantic_hash": ""
   },
   "tests/Test-MobileRuffleEmulator.ps1": {
     "mtime": 1793199855.3389542,
@@ -288,9 +288,9 @@
     "semantic_hash": ""
   },
   ".github/workflows/release.yml": {
-    "mtime": 1793236857.604259,
-    "seen": 1793237545.3444548,
-    "ast_hash": "370f5456819e0e0f3f0ae7b9a2b0131f",
+    "mtime": 1793447814.9393504,
+    "seen": 1793447859.0504453,
+    "ast_hash": "f4a09a1de1787f29c237bb5eb88e7ec2",
     "semantic_hash": ""
   },
   "AGENTS.md": {
@@ -384,9 +384,9 @@
     "semantic_hash": ""
   },
   "mobile/air-client/assets/ciel_skill.png": {
-    "mtime": 1793064291.956756,
-    "seen": 1793237545.3444786,
-    "ast_hash": "155cf16f0e5267f9aa6adb51275d6718",
+    "mtime": 1793436601.255108,
+    "seen": 1793437627.2350533,
+    "ast_hash": "aba2a82fb4362bde316b2dc182d2fb1e",
     "semantic_hash": ""
   },
   "mobile/app/src/main/res/drawable-nodpi/ciel_skill.png": {
@@ -453,6 +453,12 @@
     "mtime": 1793262243.487376,
     "seen": 1793262962.9522028,
     "ast_hash": "1b5f010fd0b070cb94251ab5ff5714a8",
+    "semantic_hash": ""
+  },
+  "docs/releases/v1.0.0.md": {
+    "mtime": 1793447837.0411866,
+    "seen": 1793447859.0504606,
+    "ast_hash": "f744501320debd08baebc0a22192286d",
     "semantic_hash": ""
   }
 }

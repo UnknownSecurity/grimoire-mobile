@@ -1,17 +1,17 @@
-# Graph Report - grimoire-mobile  (2026-10-29)
+# Graph Report - grimoire-mobile  (2026-10-31)
 
 ## Corpus Check
-- 66 files · ~144,187 words
+- 67 files · ~132,384 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 55 file(s) not represented in the graph (top: .as 26, .xml 12, (none) 6)
 
 ## Summary
-- 1032 nodes · 1955 edges · 76 communities (38 shown, 38 thin omitted)
+- 1035 nodes · 1957 edges · 80 communities (36 shown, 44 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 52 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `19fdafaa`
+- Built from commit: `e7515854`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -46,7 +46,7 @@
 - .toString
 - .constructor
 - ActionResult
-- In
+- TransportStatus
 - m
 - BridgeContractTest.kt
 - vn
@@ -54,7 +54,7 @@
 - Grimoire Exodus Mobile agent guide
 - Visual design direction
 - 16. Phased roadmap
-- qe
+- ActionResult
 - 17. Stop/go gates
 - Grimoire Exodus AIR client
 - 21. Sources
@@ -71,6 +71,10 @@
 - gbot/v1/README.md
 - contracts/README.md
 - shared/README.md
+- .dispatch
+- K
+- Grimoire Exodus Mobile v1.0.0
+- k
 
 ## God Nodes (most connected - your core abstractions)
 1. `gn` - 78 edges
@@ -99,15 +103,15 @@
 ## Import Cycles
 - None detected.
 
-## Communities (76 total, 38 thin omitted)
+## Communities (80 total, 44 thin omitted)
 
 ### Community 2 - "LegacyGbotReader"
 Cohesion: 0.09
 Nodes (5): LegacyGbotCommand, LegacyGbotDocument, LegacyGbotException, LegacyGbotReader, LegacyGbotReaderTest
 
 ### Community 3 - "ln"
-Cohesion: 0.11
-Nodes (7): cn(), createPlayer(), jn(), ln(), Ne(), wn(), yn()
+Cohesion: 0.07
+Nodes (11): cn(), createPlayer(), In, jn(), kn(), la(), ln(), Ne() (+3 more)
 
 ### Community 4 - "GameCapability"
 Cohesion: 0.18
@@ -118,28 +122,24 @@ Cohesion: 0.11
 Nodes (35): 845(), A(), Ae(), B(), Be(), Ce(), d(), g() (+27 more)
 
 ### Community 6 - ".validate"
-Cohesion: 0.10
-Nodes (9): MobileNavigationStateTest, OfflineGameTransportTest, BridgeCompatibility, BridgeHandshake, BridgeHandshakeValidator, Compatible, Incompatible, BridgeHandshakeValidatorTest (+1 more)
+Cohesion: 0.12
+Nodes (8): MobileNavigationStateTest, BridgeCompatibility, BridgeHandshake, BridgeHandshakeValidator, Compatible, Incompatible, BridgeHandshakeValidatorTest, TransportStatusTest
 
 ### Community 8 - "ruffle.js"
-Cohesion: 0.10
-Nodes (13): Ae(), ca(), Ce(), dn(), fa(), fn(), ke, la() (+5 more)
-
-### Community 10 - "RuffleGameTransport"
-Cohesion: 0.14
-Nodes (4): JavascriptBridge, RuffleGameTransport, RufflePacket, RufflePlayerProfile
+Cohesion: 0.09
+Nodes (12): Ae(), bn, ca(), Ce(), dn(), fn(), ke, on() (+4 more)
 
 ### Community 11 - "RuffleLoopbackServer"
 Cohesion: 0.09
 Nodes (3): HttpRequest, RuffleLoopbackServer, WebSocketFrame
 
 ### Community 12 - "Composable"
-Cohesion: 0.20
-Nodes (33): ActivityDock(), BotDocumentDetails(), BotImportEmptyState(), BotManagerSurface(), BotMetadata(), BrandMark(), CompactAccountCard(), CompactBotCard() (+25 more)
+Cohesion: 0.25
+Nodes (21): BotDocumentDetails(), BotImportEmptyState(), BotImportMessage(), BotManagerSurface(), BotMetadata(), CompactBotCard(), FeaturePlaceholder(), feedback() (+13 more)
 
 ### Community 13 - ".constructor"
-Cohesion: 0.29
-Nodes (21): 65(), o(), a(), b(), c(), d(), f(), g() (+13 more)
+Cohesion: 0.31
+Nodes (20): 65(), o(), a(), b(), c(), d(), f(), g() (+12 more)
 
 ### Community 14 - "I"
 Cohesion: 0.15
@@ -162,40 +162,36 @@ Cohesion: 0.14
 Nodes (14): 11. Accounts, security, and privacy, 12. Lifecycle, recovery, and performance rules, 14. Repository layout, 18. Decisions needed from the project owner, 19. Release-policy questions, 1. Executive summary, 20. Recommendation, 2. Reality check (+6 more)
 
 ### Community 23 - "Destination"
-Cohesion: 0.15
-Nodes (12): BotImportMessage(), BrandBar(), Destination, Bank, Bots, Home, Options, Packet (+4 more)
+Cohesion: 0.17
+Nodes (12): BrandBar(), CompactNavigation(), Destination, Bank, Bots, Home, Options, Packet (+4 more)
 
 ### Community 25 - "ea"
-Cohesion: 0.24
-Nodes (3): da(), ea, pluginPolyfill()
+Cohesion: 0.21
+Nodes (4): da(), ea, fa(), pluginPolyfill()
 
 ### Community 28 - "GrimoireExodusApp"
-Cohesion: 0.13
-Nodes (10): BotImportState, Empty, Failed, GrimoireExodusApp(), LandscapePhonePreview(), Loaded, Loading, MobileNavigationState (+2 more)
+Cohesion: 0.22
+Nodes (8): BotImportState, Empty, Failed, GrimoireExodusApp(), LandscapePhonePreview(), Loaded, Loading, MobileNavigationState
 
 ### Community 29 - ".toString"
-Cohesion: 0.19
-Nodes (5): a(), De(), je, K, xe()
-
-### Community 30 - ".constructor"
-Cohesion: 0.18
-Nodes (3): bn, Rn(), zn()
+Cohesion: 0.36
+Nodes (3): a(), je, xe()
 
 ### Community 31 - "ActionResult"
-Cohesion: 0.11
-Nodes (13): Accepted, ActionResult, ConnectionState, Connecting, Failed, Incompatible, Offline, Ready (+5 more)
+Cohesion: 0.10
+Nodes (12): OfflineGameTransport, OfflineGameTransportTest, ConnectionState, Connecting, Failed, Incompatible, Offline, Ready (+4 more)
 
-### Community 32 - "In"
-Cohesion: 0.18
-Nodes (3): In, kn(), Tn()
+### Community 32 - "TransportStatus"
+Cohesion: 0.23
+Nodes (13): ActivityDock(), BrandMark(), CompactAccountCard(), CompactBrandBar(), CompactShell(), ControlRail(), GameSurface(), LandscapeShell() (+5 more)
 
 ### Community 34 - "m"
-Cohesion: 0.14
-Nodes (3): d, f, m
+Cohesion: 0.13
+Nodes (4): d, f, m, polyfill()
 
 ### Community 40 - "qe"
-Cohesion: 0.17
-Nodes (4): He, hn(), Ve, Ze
+Cohesion: 0.15
+Nodes (6): Fe(), He, hn(), Oe(), qe(), Se()
 
 ### Community 41 - "Grimoire Exodus Mobile agent guide"
 Cohesion: 0.22
@@ -209,9 +205,9 @@ Nodes (9): 10. Android UX and navigation, Accessibility and ownership boundaries
 Cohesion: 0.22
 Nodes (9): 16. Phased roadmap, Overall range, Phase 0 — architecture and offline foundation (complete), Phase 1 — standalone AIR client proof (in progress), Phase 2 — integrated product foundation (6–10 weeks), Phase 3 — legacy GBot engine and core commands (10–20 weeks), Phase 4 — game integration and product parity (12–28 weeks), Phase 5 — advanced tools and plug-in replacement (12–24+ weeks) (+1 more)
 
-### Community 57 - "qe"
-Cohesion: 0.29
-Nodes (4): Fe(), Oe(), qe(), Se()
+### Community 57 - "ActionResult"
+Cohesion: 0.36
+Nodes (3): Accepted, ActionResult, Rejected
 
 ### Community 58 - "17. Stop/go gates"
 Cohesion: 0.33
@@ -255,20 +251,20 @@ Nodes (3): 6.1 Product shape, 6.2 Game transport contract, 6. Recommended produc
 
 ## Knowledge Gaps
 - **28 isolated node(s):** `Home`, `Bots`, `Bank`, `Options`, `Packet` (+23 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 387 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **38 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 389 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **44 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `GameTransport` connect `GrimoireExodusApp` to `GrimoireExodusApp.kt`, `6. Recommended product architecture`, `RuffleGameTransport.kt`, `RuffleGameTransport`, `Composable`, `Contributor Covenant Code of Conduct`, `Grimoire Exodus for Android — feasibility and delivery plan`, `ActionResult`?**
-  _High betweenness centrality (0.083) - this node is a cross-community bridge._
+- **Why does `GameTransport` connect `TransportStatus` to `GrimoireExodusApp.kt`, `6. Recommended product architecture`, `RuffleGameTransport.kt`, `RuffleGameTransport`, `Composable`, `Contributor Covenant Code of Conduct`, `Grimoire Exodus for Android — feasibility and delivery plan`, `GrimoireExodusApp`, `ActionResult`?**
+  _High betweenness centrality (0.087) - this node is a cross-community bridge._
 - **What connects `Home`, `Bots`, `Bank` to the rest of the system?**
   _28 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `GrimoireExodusApp.kt` be split into smaller, more focused modules?**
   _Cohesion score 0.031746031746031744 - nodes in this community are weakly interconnected._
-- **Why does `RuffleGameTransport` connect `RuffleGameTransport` to `GrimoireExodusApp.kt`, `RuffleGameTransport.kt`, `RuffleLoopbackServer`, `Composable`, `MobileBridgeSession`, `MainActivity.kt`, `RuffleGameSurface.kt`, `RuffleServerMap`, `GrimoireExodusApp`, `ActionResult`?**
-  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+- **Why does `RuffleGameTransport` connect `RuffleGameTransport` to `TransportStatus`, `GrimoireExodusApp.kt`, `RuffleGameTransport.kt`, `.dispatch`, `RuffleLoopbackServer`, `Composable`, `MobileBridgeSession`, `MainActivity.kt`, `RuffleGameSurface.kt`, `RuffleServerMap`, `ActionResult`?**
+  _High betweenness centrality (0.069) - this node is a cross-community bridge._
 - **Should `Mn` be split into smaller, more focused modules?**
   _Cohesion score 0.051418439716312055 - nodes in this community are weakly interconnected._
 - **Why does `Grimoire Exodus for Android — feasibility and delivery plan` connect `Grimoire Exodus for Android — feasibility and delivery plan` to `13. Updates and distribution`, `3. Verified research findings`, `4. Goals and non-goals`, `6. Recommended product architecture`, `Visual design direction`, `Contributor Covenant Code of Conduct`, `16. Phased roadmap`, `17. Stop/go gates`, `21. Sources`, `15. Testing and compatibility gates`, `9. Legacy GBot compatibility`?**

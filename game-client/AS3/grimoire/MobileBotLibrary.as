@@ -59,6 +59,41 @@ package grimoire
             return this.currentStatus;
         }
 
+        /**
+         * Resolves a nested CmdLoadBot reference only against bots already in
+         * the bounded mobile library. Desktop absolute paths are reduced to a
+         * file name and are never opened directly on Android.
+         */
+        public function loadKnownDocument(reference:String):Object
+        {
+            var requested:String = this.normalizedBotReference(reference);
+            if (requested.length == 0)
+            {
+                return null;
+            }
+            for each (var entry:Object in this.items)
+            {
+                if (entry == null || entry.file == null)
+                {
+                    continue;
+                }
+                var entryName:String = this.normalizedBotReference(String(entry.name));
+                var fileName:String = this.normalizedBotReference(File(entry.file).name);
+                if (requested == entryName || requested == fileName)
+                {
+                    try
+                    {
+                        return this.readDocument(entry.file as File);
+                    }
+                    catch (error:Error)
+                    {
+                        return null;
+                    }
+                }
+            }
+            return null;
+        }
+
         public function refresh():void
         {
             var previousPath:String = this.selectedEntry == null ? "" : this.selectedEntry.path;
@@ -572,6 +607,19 @@ package grimoire
             return value.toLowerCase().lastIndexOf(".gbot") == value.length - 5
                 ? value.substr(0, value.length - 5)
                 : value;
+        }
+
+        private function normalizedBotReference(value:String):String
+        {
+            if (value == null)
+            {
+                return "";
+            }
+            var normalized:String = value.replace(/\\/g, "/");
+            normalized = normalized.substr(normalized.lastIndexOf("/") + 1)
+                .replace(/^\s+|\s+$/g, "").toLowerCase();
+            return normalized.lastIndexOf(".gbot") == normalized.length - 5
+                ? normalized.substr(0, normalized.length - 5) : normalized;
         }
     }
 }

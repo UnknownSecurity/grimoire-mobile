@@ -98,5 +98,10 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $apk "$apk.sha256" --clobber
           } else {
-            gh release create $tag $apk "$apk.sha256" --title "Grimoire Exodus Mobile $version" --generate-notes
+            $notesPath = ".\docs\releases\$tag.md"
+            if (Test-Path -LiteralPath $notesPath -PathType Leaf) {
+              gh release create $tag $apk "$apk.sha256" --title "Grimoire Exodus Mobile $version" --notes-file $notesPath
+            } else {
+              gh release create $tag $apk "$apk.sha256" --title "Grimoire Exodus Mobile $version" --generate-notes
+            }
           }

@@ -327,7 +327,7 @@ package grimoire
 
         private function createTemplates():Array
         {
-            return [
+            var result:Array = [
                 this.template("Combat", "Kill monster", "Combat.CmdKill", { Monster: "*", Packet: false }),
                 this.template("Combat", "Kill for item", "Combat.CmdKillFor",
                     { Monster: "*", ItemName: "", ItemType: 0, Quantity: "1" }),
@@ -350,7 +350,7 @@ package grimoire
                     { QuestID: "", ItemID: "-1" }),
                 this.template("Item", "Get drop", "Item.CmdGetDrop", { ItemName: "" }),
                 this.template("Item", "Equip item", "Item.CmdEquip", { ItemName: "" }),
-                this.template("Item", "Buy item", "Item.CmdBuy", { ItemName: "" }),
+                this.template("Item", "Buy item", "Item.CmdBuy", { ShopId: 0, ItemName: "" }),
                 this.template("Item", "Sell item", "Item.CmdSell", { ItemName: "" }),
                 this.template("Item", "Use boost", "Item.CmdUseBoost", { ItemName: "" }),
                 this.template("Item", "Bank transfer", "Item.CmdBankTransfer",
@@ -384,7 +384,7 @@ package grimoire
                     { Value1: "", Value2: "" }),
                 this.template("Condition", "Quest in progress", "Misc.Statements.CmdQuestInProgress",
                     { Value1: "", Value2: "" }),
-                this.template("Flow", "Label", "Misc.CmdLabel", { Label: "" }),
+                this.template("Flow", "Label", "Misc.CmdLabel", { Name: "" }),
                 this.template("Flow", "Go to label", "Misc.CmdGotoLabel", { Label: "" }),
                 this.template("Flow", "Change index", "Misc.CmdIndex", { Type: 2, Index: 1 }),
                 this.template("Flow", "Restart bot", "Misc.CmdRestart", {}),
@@ -392,6 +392,139 @@ package grimoire
                 this.template("Flow", "Stop with message", "Misc.CmdStopBotWithMessage",
                     { Message: "BOT STOPPED" })
             ];
+            this.appendExtendedActionTemplates(result);
+            this.appendStatementTemplates(result);
+            return result;
+        }
+
+        private function appendExtendedActionTemplates(target:Array):void
+        {
+            var definitions:Array = [
+                ["Quest", "Accept quest (legacy)", "Quest.CmdAcceptQuest", { QuestID: "" }],
+                ["Quest", "Complete quest (legacy)", "Quest.CmdCompleteQuest",
+                    { QuestID: "", ItemID: "-1" }],
+                ["Item", "Bank item list", "Misc.CmdBankList", {}],
+                ["Item", "Swap bank items", "Item.CmdBankSwap",
+                    { BankItemName: "", InventoryItemName: "" }],
+                ["Misc", "Beep", "Misc.CmdBeep", { Times: 1 }],
+                ["Layout", "Blank row", "Misc.CmdBlank", {}],
+                ["Layout", "Text row", "Misc.CmdBlank2", { Text: "" }],
+                ["Layout", "Colored text row", "Misc.CmdBlank3",
+                    { Text: "", Alpha: 255, R: 160, G: 110, B: 255 }],
+                ["Misc", "Set bot delay (variable)", "Misc.CmdBotDelay2", { Delay: "500" }],
+                ["Item", "Buy item from shop", "Item.CmdBuy2",
+                    { ShopId: "", ItemName: "", Manual: false }],
+                ["Item", "Buy item by ID", "Item.CmdBuyByID",
+                    { ItemID: "", ShopID: "", ShopItemID: "", Manual: false }],
+                ["Item", "Buy item fast", "Item.CmdBuyFast",
+                    { ItemName: "", Manual: false }],
+                ["Item", "Buy item by ID fast", "Item.CmdBuyFastByID",
+                    { ItemID: "", ShopID: "", ShopItemID: "", Manual: false }],
+                ["Combat", "Cancel auto attack", "Combat.CmdCancelAutoAttack", {}],
+                ["Combat", "Cancel target", "Combat.CmdCancelTarget", {}],
+                ["Misc", "Change name or guild", "Misc.CmdChange", { Guild: false, Text: "" }],
+                ["Variable", "Clear temporary values", "Misc.CmdClearTemp", {}],
+                ["Misc", "Follow player", "Misc.CmdFollow", { Name: "" }],
+                ["Variable", "Store current class", "Misc.Statements.CmdGetClassWithVar",
+                    { Value1: "class", Value2: "" }],
+                ["Map", "Jump to cell", "Map.CmdJump", { Cell: "Enter", Pad: "Spawn" }],
+                ["Item", "Load shop", "Item.CmdLoad", { ShopId: 0 }],
+                ["Item", "Load shop (variable)", "Item.CmdLoad2", { ShopId: "" }],
+                ["Flow", "Load nested bot", "Misc.CmdLoadBot",
+                    { BotFileName: "", BotFilePath: "" }],
+                ["Map", "Load map SWF", "Misc.CmdLoadMapSwf", { Name: "" }],
+                ["Misc", "Write log entry", "Misc.CmdLog", { Text: "", Debug: false }],
+                ["Misc", "Log out", "Misc.CmdLogout", {}],
+                ["Map", "Get map item (numeric)", "Item.CmdMapItem", { ItemId: 0 }],
+                ["Misc", "Send packet (legacy)", "Misc.CmdPacket",
+                    { Packet: "", Client: false }],
+                ["Misc", "Packet spam", "Item.CmdPacketlist2",
+                    { Type: 0, Packet: "", Delay: 1000 }],
+                ["Quest", "Manage quest list", "Quest.CmdQuestlist",
+                    { QuestID: "", ItemID: "-1", state: 0 }],
+                ["Flow", "Return from nested bot", "Misc.CmdReturn", {}],
+                ["Misc", "Set client level", "Misc.CmdSetClientLevel", {}],
+                ["Misc", "Set frame rate", "Misc.CmdSetFPS", { FPS: 30 }],
+                ["Combat", "Toggle provoke in cell", "Misc.CmdToggleProvoke", { Type: 2 }],
+                ["Combat", "Toggle provoke in map", "Misc.CmdToggleProvokeInMap",
+                    { Type: 2, ProvokePacket: "" }],
+                ["Combat", "Use skill (variable)", "Combat.CmdUseSkill2",
+                    { Skill: "", Index: "1", SafeHp: 0, SafeMp: 0,
+                        Wait: false, Monster: "" }]
+            ];
+            for each (var definition:Array in definitions)
+            {
+                this.appendTemplateIfMissing(target, String(definition[0]),
+                    String(definition[1]), String(definition[2]), definition[3]);
+            }
+        }
+
+        private function appendStatementTemplates(target:Array):void
+        {
+            var names:Array = [
+                "CmdAvailableMonstersGreaterThan", "CmdAvailableMonstersLessThan",
+                "CmdCellIs", "CmdCellIsNot", "CmdEquipped",
+                "CmdFactionRankGreaterThan", "CmdFactionRankLessThan",
+                "CmdGoldGreaterThan", "CmdGoldLessThan", "CmdHealthGreaterThan",
+                "CmdHealthLessThan", "CmdHealthPercentageGreaterThan",
+                "CmdHealthPercentageLessThan", "CmdInBank", "CmdInCombat",
+                "CmdInHouse", "CmdInInventory", "CmdInTemp", "CmdIntEqualInt",
+                "CmdIntGreaterThan", "CmdIntIs", "CmdIntIsNot", "CmdIntLessThan",
+                "CmdIntNotEqualInt", "CmdIsMaxStack", "CmdIsMember",
+                "CmdIsNotMaxStack", "CmdIsNotMember", "CmdItemNotPickupable",
+                "CmdItemPickupable", "CmdLevelGreaterThan", "CmdLevelIs",
+                "CmdLevelLessThan", "CmdListInInv", "CmdManaGreaterThan",
+                "CmdManaLessThan", "CmdMapIs", "CmdMapIsNot",
+                "CmdMonsterHealthGreaterThan", "CmdMonsterHealthLessThan",
+                "CmdMonsterInRoom", "CmdMonsterNotInRoom", "CmdNotEquipped",
+                "CmdNotInBank", "CmdNotInCombat", "CmdNotInHouse",
+                "CmdNotInInventory", "CmdNotInTemp", "CmdPlayerAuraIsActive",
+                "CmdPlayerAuraIsNotActive", "CmdPlayerAuraStringValIs",
+                "CmdPlayerAuraStringValIsNot", "CmdPlayerAuraValIs",
+                "CmdPlayerAuraValIsGreaterThan", "CmdPlayerAuraValIsLessThan",
+                "CmdPlayerAuraValIsNot", "CmdPlayerEquippedClass",
+                "CmdPlayerInCombat", "CmdPlayerInRoom", "CmdPlayerIsInCell",
+                "CmdPlayerIsInMyCell", "CmdPlayerIsNotInCell",
+                "CmdPlayerIsNotInMyCell", "CmdPlayerNotEquippedClass",
+                "CmdPlayerNotInCombat", "CmdPlayerNotInRoom", "CmdPlayersGreaterThan",
+                "CmdPlayersInCellGreaterThan", "CmdPlayersInCellLessThan",
+                "CmdPlayersInMyCellGreaterThan", "CmdPlayersInMyCellLessThan",
+                "CmdPlayersLessThan", "CmdQuestAvailable", "CmdQuestCompleted",
+                "CmdQuestInProgress", "CmdQuestNotAvailable", "CmdQuestNotCompleted",
+                "CmdQuestNotInProgress", "CmdSkillIsAvailable",
+                "CmdSkillIsNotAvailable", "CmdTargetAuraIsActive",
+                "CmdTargetAuraIsNotActive", "CmdTargetAuraStringValIs",
+                "CmdTargetAuraStringValIsNot", "CmdTargetAuraValIs",
+                "CmdTargetAuraValIsGreaterThan", "CmdTargetAuraValIsLessThan",
+                "CmdTargetAuraValIsNot", "CmdVisibleMonstersGreaterThan",
+                "CmdVisibleMonstersLessThan"
+            ];
+            for each (var name:String in names)
+            {
+                this.appendTemplateIfMissing(target, "Condition",
+                    this.friendlyCommandName(name), "Misc.Statements." + name,
+                    { Value1: "", Value2: "" });
+            }
+        }
+
+        private function appendTemplateIfMissing(target:Array, category:String,
+            label:String, typeName:String, fields:Object):void
+        {
+            var expected:String = typeName.substr(typeName.lastIndexOf(".") + 1);
+            for each (var definition:Object in target)
+            {
+                if (this.commandName(definition.command) == expected)
+                {
+                    return;
+                }
+            }
+            target.push(this.template(category, label, typeName, fields));
+        }
+
+        private function friendlyCommandName(name:String):String
+        {
+            var value:String = name.indexOf("Cmd") == 0 ? name.substr(3) : name;
+            return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
         }
 
         private function template(category:String, label:String, typeName:String, fields:Object):Object

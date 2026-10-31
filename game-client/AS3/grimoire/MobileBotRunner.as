@@ -2,7 +2,10 @@ package grimoire
 {
     import flash.events.Event;
     import flash.events.EventDispatcher;
+    import flash.events.SampleDataEvent;
     import flash.events.TimerEvent;
+    import flash.media.Sound;
+    import flash.media.SoundChannel;
     import flash.utils.Timer;
     import grimoire.game.Aura;
     import grimoire.game.Bank;
@@ -26,9 +29,12 @@ package grimoire
     public final class MobileBotRunner extends EventDispatcher
     {
         public static const STATE_CHANGED:String = "mobileBotStateChanged";
+        private static const MAX_NESTED_BOTS:int = 16;
+        private static const MAX_COMMANDS:int = 5000;
 
         private var timer:Timer = new Timer(1, 1);
         private var packetTimer:Timer = new Timer(1000);
+        private var provokeTimer:Timer = new Timer(1000);
         private var commands:Array = [];
         private var index:int;
         private var running:Boolean;
@@ -54,11 +60,22 @@ package grimoire
         private var dropWhitelist:Array = [];
         private var pickupEnabled:Boolean;
         private var questList:Array = [];
+        private var botResolver:Function;
+        private var configurationStack:Array = [];
+        private var provokeCellEnabled:Boolean;
+        private var provokeMapEnabled:Boolean;
+        private var provokePacket:String = "";
+        private var beepSound:Sound;
+        private var beepChannel:SoundChannel;
+        private var beepSamplesRemaining:int;
+        private var beepSampleIndex:int;
 
-        public function MobileBotRunner()
+        public function MobileBotRunner(documentResolver:Function = null)
         {
+            this.botResolver = documentResolver;
             this.timer.addEventListener(TimerEvent.TIMER_COMPLETE, this.onTimer);
             this.packetTimer.addEventListener(TimerEvent.TIMER, this.onPacketTimer);
+            this.provokeTimer.addEventListener(TimerEvent.TIMER, this.onProvokeTimer);
         }
 
         public function get isRunning():Boolean
@@ -97,36 +114,20 @@ package grimoire
                 this.setStatus("SIGN IN BEFORE STARTING A BOT");
                 return;
             }
-            var list:Array = document == null ? null : document.mobileCommands as Array;
-            if (list == null || list.length == 0)
+            this.stopTimer();
+            this.configurationStack = [];
+            this.tempVariables = {};
+            this.tempIntegers = {};
+            this.provokeCellEnabled = false;
+            this.provokeMapEnabled = false;
+            this.provokePacket = "";
+            this.provokeTimer.stop();
+            this.stopBeep();
+            if (!this.activateConfiguration(document, 0))
             {
                 this.setStatus("SELECT A BOT WITH COMMANDS");
                 return;
             }
-            this.stopTimer();
-            this.configuration = document;
-            this.commands = list.concat();
-            // Older GBots commonly omit BotDelay or save it as zero. Keep a
-            // small cooperative delay so AQW can finish target and asset state
-            // updates between commands on slower Android devices.
-            this.botDelay = document.BotDelay == null ? 500
-                : this.numberValue(document.BotDelay, 10, 60000);
-            this.labels = {};
-            this.skillDelay = document.SkillDelay == null ? 250
-                : this.numberValue(document.SkillDelay, 10, 10000);
-            this.buildSkillSets(document.Skills);
-            this.loadConfigurationLists(document);
-            this.activeSkillSet = null;
-            this.skillCursor = 0;
-            for (var labelIndex:int = 0; labelIndex < this.commands.length; labelIndex++)
-            {
-                var labelCommand:Object = this.commands[labelIndex];
-                if (this.commandName(labelCommand) == "CmdLabel")
-                {
-                    this.labels[this.textValue(labelCommand.Name).toLowerCase()] = labelIndex;
-                }
-            }
-            this.index = 0;
             this.running = true;
             this.paused = false;
             this.waitingForKill = false;
@@ -136,6 +137,7 @@ package grimoire
             this.packetSpamEnabled = false;
             this.packetSpamPacket = null;
             this.packetTimer.stop();
+            this.provokeTimer.stop();
             this.setStatus("BOT RUNNING");
             this.schedule(1);
         }
@@ -152,6 +154,8 @@ package grimoire
             this.packetSpamEnabled = false;
             this.packetSpamPacket = null;
             this.packetTimer.stop();
+            this.provokeTimer.stop();
+            this.stopBeep();
             try
             {
                 Player.cancelTarget();
@@ -174,11 +178,16 @@ package grimoire
             if (this.paused)
             {
                 this.packetTimer.stop();
+                this.provokeTimer.stop();
             }
             else if (this.packetSpamEnabled && this.packetSpamPacket != null
                 && this.packetSpamPacket.length > 0)
             {
                 this.packetTimer.start();
+            }
+            if (!this.paused)
+            {
+                this.updateProvokeTimer();
             }
             this.setStatus(this.paused ? "BOT PAUSED" : "BOT RUNNING");
             if (!this.paused)
@@ -228,6 +237,14 @@ package grimoire
                     case "CmdBotDelay2":
                         this.botDelay = this.numberValue(command.Delay, 0, 60000);
                         delay = this.botDelay;
+                        break;
+                    case "CmdBeep":
+                        var beepTimes:int = this.numberValue(command.Times, 0, 20);
+                        if (beepTimes > 0)
+                        {
+                            this.playBeep(beepTimes);
+                            delay = beepTimes * 150;
+                        }
                         break;
                     case "CmdJoin":
                         Player.join(this.resolveText(command.Map),
@@ -403,10 +420,15 @@ package grimoire
                             + String(levelCap) + "}}}", "json");
                         break;
                     case "CmdToggleProvoke":
-                        if (int(command.Type) != 0)
-                        {
-                            Setting.provokeMonsters();
-                        }
+                        this.provokeCellEnabled = this.toggleValue(
+                            this.provokeCellEnabled, command.Type);
+                        this.updateProvokeTimer();
+                        break;
+                    case "CmdToggleProvokeInMap":
+                        this.provokeMapEnabled = this.toggleValue(
+                            this.provokeMapEnabled, command.Type);
+                        this.provokePacket = this.resolveText(command.ProvokePacket);
+                        this.updateProvokeTimer();
                         break;
                     case "CmdClientMessage":
                         Root.gameMessage(this.resolveText(command.Messages));
@@ -480,6 +502,47 @@ package grimoire
                     case "CmdQuestlist":
                         this.executeQuestListCommand(command);
                         delay = 750;
+                        break;
+                    case "CmdLoadBot":
+                        if (this.configurationStack.length >= MAX_NESTED_BOTS)
+                        {
+                            this.stop("BOT STOPPED: NESTED BOT LIMIT REACHED");
+                            return;
+                        }
+                        var botReference:String = this.resolveText(command.BotFilePath);
+                        if (botReference.length == 0)
+                        {
+                            botReference = this.resolveText(command.BotFileName);
+                        }
+                        var nestedDocument:Object = this.botResolver == null
+                            ? null : this.botResolver(botReference);
+                        if (nestedDocument == null)
+                        {
+                            this.stop("BOT STOPPED: NESTED BOT NOT FOUND");
+                            return;
+                        }
+                        this.configurationStack.push({ configuration: this.configuration,
+                            index: this.index });
+                        if (!this.activateConfiguration(nestedDocument, 0))
+                        {
+                            this.configurationStack.pop();
+                            this.stop("BOT STOPPED: NESTED BOT IS INVALID");
+                            return;
+                        }
+                        delay = 1;
+                        break;
+                    case "CmdReturn":
+                        if (this.configurationStack.length > 0)
+                        {
+                            var previous:Object = this.configurationStack.pop();
+                            if (!this.activateConfiguration(previous.configuration,
+                                int(previous.index)))
+                            {
+                                this.stop("BOT STOPPED: RETURN STATE IS INVALID");
+                                return;
+                            }
+                        }
+                        delay = 1;
                         break;
                     case "CmdGotoLabel":
                         var targetLabel:String = this.textValue(command.Label).toLowerCase();
@@ -587,6 +650,155 @@ package grimoire
             this.index = 0;
             this.setStatus("BOT RUNNING");
             this.schedule(Math.max(1, this.botDelay));
+        }
+
+        private function activateConfiguration(document:Object, startIndex:int):Boolean
+        {
+            var list:Array = document == null ? null : document.mobileCommands as Array;
+            if (list == null && document != null && document.Commands != null)
+            {
+                list = document.Commands["$values"] as Array;
+                document.mobileCommands = list;
+            }
+            if (list == null || list.length == 0 || list.length > MAX_COMMANDS)
+            {
+                return false;
+            }
+            this.configuration = document;
+            this.commands = list.concat();
+            // Older GBots commonly omit BotDelay or save it as zero. Keep a
+            // small cooperative delay so AQW can finish target and asset state
+            // updates between commands on slower Android devices.
+            this.botDelay = document.BotDelay == null ? 500
+                : this.numberValue(document.BotDelay, 10, 60000);
+            this.labels = {};
+            this.skillDelay = document.SkillDelay == null ? 250
+                : this.numberValue(document.SkillDelay, 10, 10000);
+            this.buildSkillSets(document.Skills);
+            this.loadConfigurationLists(document);
+            this.activeSkillSet = null;
+            this.skillCursor = 0;
+            for (var labelIndex:int = 0; labelIndex < this.commands.length; labelIndex++)
+            {
+                var labelCommand:Object = this.commands[labelIndex];
+                if (this.commandName(labelCommand) == "CmdLabel")
+                {
+                    this.labels[this.textValue(labelCommand.Name).toLowerCase()] = labelIndex;
+                }
+            }
+            this.index = Math.max(0, Math.min(this.commands.length, startIndex));
+            this.waitingForKill = false;
+            this.killEngaged = false;
+            this.killTarget = null;
+            this.killForItem = null;
+            return true;
+        }
+
+        private function toggleValue(current:Boolean, raw:*):Boolean
+        {
+            var value:String = String(raw).toLowerCase();
+            if (value == "0" || value == "off" || value == "false")
+            {
+                return false;
+            }
+            if (value == "1" || value == "on" || value == "true")
+            {
+                return true;
+            }
+            return !current;
+        }
+
+        private function updateProvokeTimer():void
+        {
+            if (this.running && !this.paused
+                && (this.provokeCellEnabled || this.provokeMapEnabled))
+            {
+                if (!this.provokeTimer.running)
+                {
+                    this.provokeTimer.start();
+                }
+            }
+            else
+            {
+                this.provokeTimer.stop();
+            }
+        }
+
+        private function onProvokeTimer(event:TimerEvent):void
+        {
+            if (!this.running || this.paused || !Root.isLoggedIn)
+            {
+                this.provokeTimer.stop();
+                return;
+            }
+            try
+            {
+                if (this.provokeCellEnabled)
+                {
+                    Setting.provokeMonsters();
+                }
+                if (this.provokeMapEnabled)
+                {
+                    if (this.provokePacket.length > 0)
+                    {
+                        Root.sendServerPacket(this.preparePacket(this.provokePacket));
+                    }
+                    else
+                    {
+                        Root.provokeAllMonsters();
+                    }
+                }
+            }
+            catch (error:Error)
+            {
+                // Room transitions temporarily invalidate world objects. Keep
+                // the bot alive and retry after the next bounded timer tick.
+            }
+        }
+
+        private function playBeep(times:int):void
+        {
+            this.stopBeep();
+            this.beepSamplesRemaining = Math.max(1, Math.min(20, times)) * 6615;
+            this.beepSampleIndex = 0;
+            this.beepSound = new Sound();
+            this.beepSound.addEventListener(SampleDataEvent.SAMPLE_DATA, this.onBeepSample);
+            this.beepChannel = this.beepSound.play();
+        }
+
+        private function onBeepSample(event:SampleDataEvent):void
+        {
+            var count:int = Math.min(2048, this.beepSamplesRemaining);
+            for (var i:int = 0; i < count; i++)
+            {
+                var withinBeep:int = this.beepSampleIndex % 6615;
+                var sample:Number = withinBeep < 4410
+                    ? Math.sin(2 * Math.PI * 880 * this.beepSampleIndex / 44100) * 0.18
+                    : 0;
+                event.data.writeFloat(sample);
+                event.data.writeFloat(sample);
+                this.beepSampleIndex++;
+            }
+            this.beepSamplesRemaining -= count;
+            if (this.beepSamplesRemaining <= 0 && this.beepSound != null)
+            {
+                this.beepSound.removeEventListener(SampleDataEvent.SAMPLE_DATA, this.onBeepSample);
+            }
+        }
+
+        private function stopBeep():void
+        {
+            if (this.beepSound != null)
+            {
+                this.beepSound.removeEventListener(SampleDataEvent.SAMPLE_DATA, this.onBeepSample);
+                this.beepSound = null;
+            }
+            if (this.beepChannel != null)
+            {
+                this.beepChannel.stop();
+                this.beepChannel = null;
+            }
+            this.beepSamplesRemaining = 0;
         }
 
         private function buildSkillSets(raw:*):void

@@ -40,12 +40,13 @@ package grimoire
         private static const GAME_HEIGHT:Number = 550;
         private static const MARGIN:Number = 8;
         private static const TOP_HEIGHT:Number = 52;
-        private static const SIDEBAR_WIDTH:Number = 300;
-        private static const RIGHT_RAIL_X:Number = 660;
-        private static const RIGHT_RAIL_WIDTH:Number = 292;
-        private static const VIEW_X:Number = 308;
+        private static const SIDEBAR_WIDTH:Number = 332;
+        private static const RIGHT_RAIL_X:Number = 348;
+        private static const RIGHT_RAIL_WIDTH:Number = 304;
+        private static const VIEW_X:Number = 340;
         private static const VIEW_Y:Number = 68;
         private static const TRANSITION_MS:Number = 180;
+        private static const SECTION_TRANSITION_MS:Number = 150;
         private static const CIEL_NAME:String = "Ciel";
         private static const CIEL_DESCRIPTION:String = "Summon Ciel to automate and take over your body.";
         private static const CIEL_X:Number = 924;
@@ -128,7 +129,7 @@ package grimoire
         private var optionsPage:int;
         private var optionTimer:Timer;
         private var lastAutoSaveAt:int;
-        private var packetCaptureEnabled:Boolean = true;
+        private var packetCaptureEnabled:Boolean = false;
         private var packetEntries:Array = [];
         private var packetDraft:String = "";
         private var packetInput:TextField;
@@ -151,6 +152,7 @@ package grimoire
         private var startToggleX:Number;
         private var startToggleY:Number;
         private var startChromeAlpha:Number;
+        private var sectionAnimationStartedAt:int;
 
         public function MobileShell(game:DisplayObject)
         {
@@ -160,7 +162,7 @@ package grimoire
             this.game.scrollRect = new Rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT);
             this.preferences = new MobilePreferences();
             this.botLibrary = new MobileBotLibrary();
-            this.botRunner = new MobileBotRunner();
+            this.botRunner = new MobileBotRunner(this.botLibrary.loadKnownDocument);
             this.botEditor = new MobileBotEditor();
             try
             {
@@ -226,6 +228,7 @@ package grimoire
             }
 
             removeEventListener(Event.ENTER_FRAME, this.animateLayout);
+            removeEventListener(Event.ENTER_FRAME, this.animateSection);
             // SHOW_ALL owns the only device transform. Keep the overlay on the
             // same logical 960x550 plane as AQW to preserve visual and pointer
             // alignment across map changes.
@@ -336,6 +339,7 @@ package grimoire
             {
                 this.applyImmediateOptions();
             }
+            this.refreshNavigationAvailability();
             this.updateOverlayControls();
         }
 
@@ -476,9 +480,14 @@ package grimoire
 
         private function redrawNavigationButton(button:Sprite, selected:Boolean, width:Number, height:Number):void
         {
+            var unavailable:Boolean = button.name == "nav_Bank" && !this.gameConnected;
             var backgroundShape:Shape = button.getChildByName("background") as Shape;
             var labelField:TextField = button.getChildByName("label") as TextField;
             var icon:Shape = button.getChildByName("icon") as Shape;
+            button.alpha = unavailable ? 0.35 : 1;
+            button.mouseEnabled = !unavailable;
+            button.buttonMode = !unavailable;
+            selected = selected && !unavailable;
             backgroundShape.graphics.clear();
             if (selected)
             {
@@ -489,6 +498,15 @@ package grimoire
             }
             labelField.textColor = selected ? PALE_VIOLET : SECONDARY_TEXT;
             this.drawNavigationIcon(icon, button.name.substr(4), selected);
+        }
+
+        private function refreshNavigationAvailability():void
+        {
+            for each (var button:Sprite in this.navigationButtons)
+            {
+                this.redrawNavigationButton(button,
+                    button.name == "nav_" + this.selectedNavigation, 76, 40);
+            }
         }
 
         private function drawNavigationIcon(icon:Shape, label:String, selected:Boolean):void
@@ -644,6 +662,7 @@ package grimoire
                 this.closeOverlay();
                 return;
             }
+            var changed:Boolean = requested != this.selectedNavigation;
             this.selectedNavigation = requested;
             var i:int;
             var button:Sprite;
@@ -653,11 +672,16 @@ package grimoire
                 this.redrawNavigationButton(button, button.name == "nav_" + this.selectedNavigation, 76, 40);
             }
             this.renderSidebar(this.selectedNavigation);
+            if (changed)
+            {
+                this.animateSectionTransition();
+            }
             HostBridge.call("mobileNavigation", this.selectedNavigation);
         }
 
         private function showSection(section:String):void
         {
+            var changed:Boolean = section != this.selectedNavigation;
             this.selectedNavigation = section;
             if (!this.chromeVisible)
             {
@@ -670,6 +694,48 @@ package grimoire
                 this.redrawNavigationButton(button, button.name == "nav_" + section, 76, 40);
             }
             this.renderSidebar(section);
+            if (changed)
+            {
+                this.animateSectionTransition();
+            }
+        }
+
+        private function animateSectionTransition():void
+        {
+            removeEventListener(Event.ENTER_FRAME, this.animateSection);
+            this.sidebarContent.x = 16;
+            this.rightRailContent.x = this.rightRailX + 8;
+            this.sidebarContent.alpha = 1;
+            this.rightRailContent.alpha = 1;
+            if (this.preferences.reducedMotion)
+            {
+                return;
+            }
+            this.sectionAnimationStartedAt = getTimer();
+            this.sidebarContent.x = 8;
+            this.rightRailContent.x = this.rightRailX + 16;
+            this.sidebarContent.alpha = 0;
+            this.rightRailContent.alpha = 0;
+            addEventListener(Event.ENTER_FRAME, this.animateSection);
+        }
+
+        private function animateSection(event:Event):void
+        {
+            var progress:Number = Math.min(1,
+                (getTimer() - this.sectionAnimationStartedAt) / SECTION_TRANSITION_MS);
+            var eased:Number = 1 - Math.pow(1 - progress, 3);
+            this.sidebarContent.x = 8 + (8 * eased);
+            this.rightRailContent.x = this.rightRailX + 16 - (8 * eased);
+            this.sidebarContent.alpha = eased;
+            this.rightRailContent.alpha = eased;
+            if (progress >= 1)
+            {
+                this.sidebarContent.x = 16;
+                this.rightRailContent.x = this.rightRailX + 8;
+                this.sidebarContent.alpha = 1;
+                this.rightRailContent.alpha = 1;
+                removeEventListener(Event.ENTER_FRAME, this.animateSection);
+            }
         }
 
         private function renderSidebar(section:String):void
@@ -1921,6 +1987,7 @@ package grimoire
         {
             removeEventListener(Event.REMOVED_FROM_STAGE, this.onRemovedFromStage);
             removeEventListener(Event.ENTER_FRAME, this.animateLayout);
+            removeEventListener(Event.ENTER_FRAME, this.animateSection);
             HostBridge.removeEventListener(HostBridgeEvent.MESSAGE, this.onHostBridgeMessage);
             NativeApplication.nativeApplication.removeEventListener(Event.ACTIVATE,
                 this.onApplicationActivate);
@@ -2150,8 +2217,9 @@ package grimoire
             {
                 this.applyTargetsImmediately();
             }
-            else if (!hasEventListener(Event.ENTER_FRAME))
+            else
             {
+                removeEventListener(Event.ENTER_FRAME, this.animateLayout);
                 addEventListener(Event.ENTER_FRAME, this.animateLayout);
             }
             HostBridge.call("mobileChromeChanged", this.chromeVisible);

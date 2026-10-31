@@ -24,6 +24,7 @@ $rootPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\Root.as'
 $clientPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\game\Client.as'
 $externalizerPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\Externalizer.as'
 $sessionSignalPath = Join-Path $repositoryRoot 'mobile\core\model\src\main\kotlin\com\unknownsecurity\grimoireexodus\model\MobileSessionSignal.kt'
+$versionPath = Join-Path $repositoryRoot 'VERSION'
 
 function Assert-Contract {
     param([bool] $Condition, [string] $Message)
@@ -50,6 +51,9 @@ $client = Get-Content -Raw $clientPath
 $externalizer = Get-Content -Raw $externalizerPath
 $sessionSignal = Get-Content -Raw $sessionSignalPath
 $appBuild = Get-Content -Raw $appBuildPath
+$mobileVersion = (Get-Content -Raw $versionPath).Trim()
+$mobileVersionParts = @($mobileVersion.Split('.') | ForEach-Object { [int]$_ })
+$mobileVersionCode = ($mobileVersionParts[0] * 10000) + ($mobileVersionParts[1] * 100) + $mobileVersionParts[2]
 
 Assert-Contract ($activity -match 'RuffleGameTransport\(applicationContext\)') `
     'The experimental Compose application must retain its Ruffle transport.'
@@ -140,9 +144,10 @@ Assert-Contract (($apkBuild -match '\[string\]\s*\$Engine\s*=\s*''Air''') -and
     ($apkBuild -match ':app:assembleDebug') -and
     ($appBuild -match 'applicationId\s*=\s*"com\.unknownsecurity\.grimoireexodus\.mobile\.ruffle"')) `
     'Ruffle must remain available only as an explicitly selected, separately identified experimental APK.'
-Assert-Contract (($appBuild -match 'versionCode\s*=\s*500') -and
-    ($appBuild -match 'versionName\s*=\s*"0\.5\.0"')) `
-    'The experimental Android target must use the standalone mobile 0.5.0 version.'
+Assert-Contract (($mobileVersion -match '^\d+\.\d+\.\d+$') -and
+    ($appBuild -match ('versionCode\s*=\s*' + $mobileVersionCode)) -and
+    ($appBuild -match ('versionName\s*=\s*"' + [regex]::Escape($mobileVersion) + '"'))) `
+    'The experimental Android target must use the standalone mobile VERSION source.'
 Assert-Contract (($root -match 'documentJson\.length\s*>\s*2\s*\*\s*1024\s*\*\s*1024') -and
     ($root -match 'commands\.length\s*>\s*5000') -and
     ($root -match 'getDefinitionByName\("grimoire\.MobileBotRunner"\)') -and

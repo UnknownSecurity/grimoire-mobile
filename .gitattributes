@@ -8,3 +8,7 @@
 *.ico binary
 
 *.html linguist-detectable=false
+
+# The pinned Ruffle runtime manifest verifies byte sizes and SHA-256 digests.
+# Preserve those vendor assets byte-for-byte on Windows checkouts.
+mobile/app/src/main/assets/ruffle/** -text

@@ -64,6 +64,7 @@ package grimoire
         private static const BOT_ACTION_PAGE_SIZE:int = 8;
         private static const BOT_CONFIGURATION_PAGE_SIZE:int = 6;
         private static const BOT_PROGRESS_RENDER_MS:int = 120;
+        private static const KEYBOARD_PREVIEW_TOP:Number = 8;
         private static const MAX_PACKET_ENTRIES:int = 40;
         private static const MAX_PACKET_CHARACTERS:int = 320;
 
@@ -306,6 +307,10 @@ package grimoire
             }
             this.calculateTargets();
             this.applyTargetsImmediately();
+            if (this.keyboardPreview != null && this.keyboardPreview.visible)
+            {
+                this.positionKeyboardPreview();
+            }
             this.preferences.apply(stage);
         }
 
@@ -1375,18 +1380,8 @@ package grimoire
                 return;
             }
             var previewWidth:Number = 560;
-            var previewY:Number = this.layoutHeight - 54;
-            if (stage != null)
-            {
-                var keyboardRect:Rectangle = stage.softKeyboardRect;
-                if (keyboardRect != null && keyboardRect.height > 0)
-                {
-                    var keyboardTop:Point = globalToLocal(new Point(keyboardRect.x, keyboardRect.y));
-                    previewY = keyboardTop.y - 50;
-                }
-            }
             this.keyboardPreview.x = Math.max(8, (this.layoutWidth - previewWidth) / 2);
-            this.keyboardPreview.y = Math.max(8, Math.min(this.layoutHeight - 54, previewY));
+            this.keyboardPreview.y = KEYBOARD_PREVIEW_TOP;
         }
 
         private function hideKeyboardPreview():void

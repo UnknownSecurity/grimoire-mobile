@@ -472,7 +472,6 @@ Assert-Contract ($shellSource -match 'getTimer\(\)') `
 Assert-Contract ($shellSource -notmatch '\+=\s*\([^\r\n]+\)\s*\*\s*0\.19') `
     'The old asymptotic 0.19-per-frame animation must not return.'
 Assert-Contract (($shellSource -match 'SoftKeyboardEvent\.SOFT_KEYBOARD_ACTIVATE') -and
-    ($shellSource -match 'stage\.softKeyboardRect') -and
     ($shellSource -match 'keyboardStage\.addEventListener\(FocusEvent\.FOCUS_IN') -and
     ($shellSource -match 'keyboardStage\.addEventListener\(Event\.CHANGE') -and
     ($shellSource -match 'registerKeyboardInput\(input, label\)') -and
@@ -481,7 +480,12 @@ Assert-Contract (($shellSource -match 'SoftKeyboardEvent\.SOFT_KEYBOARD_ACTIVATE
     ($shellSource -match 'this\.keyboardPreviewValue\.text') -and
     ($shellSource -match 'displayAsPassword') -and
     ($shellSource -match 'maskedKeyboardValue')) `
-    'Editable Bot, Packet, and Room fields must share the above-keyboard typing preview.'
+    'Editable Bot, Packet, and Room fields must share the keyboard typing preview.'
+Assert-Contract (($shellSource -match 'private static const KEYBOARD_PREVIEW_TOP:Number\s*=\s*8') -and
+    ($shellSource -match 'this\.keyboardPreview\.y\s*=\s*KEYBOARD_PREVIEW_TOP') -and
+    ($shellSource -notmatch 'stage\.softKeyboardRect') -and
+    ($shellSource -notmatch 'KEYBOARD_LAYOUT_RETRY')) `
+    'The keyboard preview must use deterministic safe-top placement while the Android keyboard is open.'
 Assert-Contract (($shellSource -match 'ciel_open_overlay') -and
     ($shellSource -match 'ciel_open_room') -and
     ($shellSource -match 'roomOverlayVisible') -and

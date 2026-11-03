@@ -7,9 +7,11 @@ package grimoire
     import flash.display.Sprite;
     import flash.display.Stage;
     import flash.events.Event;
+    import flash.events.FocusEvent;
     import flash.events.IOErrorEvent;
     import flash.events.MouseEvent;
     import flash.events.SecurityErrorEvent;
+    import flash.events.SoftKeyboardEvent;
     import flash.events.TimerEvent;
     import flash.geom.Point;
     import flash.geom.Rectangle;
@@ -52,10 +54,16 @@ package grimoire
         private static const CIEL_X:Number = 924;
         private static const CIEL_Y:Number = 36;
         private static const CIEL_ICON_SIZE:Number = 40;
+        private static const ROOM_PANEL_WIDTH:Number = 340;
+        private static const ROOM_PANEL_HEIGHT:Number = 410;
+        private static const ROOM_VALUE_PAGE_SIZE:int = 6;
         private static const BOT_PAGE_SIZE:int = 3;
         private static const BOT_COMMAND_PAGE_SIZE:int = 6;
         private static const BOT_TEMPLATE_PAGE_SIZE:int = 6;
         private static const BOT_PROPERTY_PAGE_SIZE:int = 5;
+        private static const BOT_ACTION_PAGE_SIZE:int = 8;
+        private static const BOT_CONFIGURATION_PAGE_SIZE:int = 6;
+        private static const BOT_PROGRESS_RENDER_MS:int = 120;
         private static const MAX_PACKET_ENTRIES:int = 40;
         private static const MAX_PACKET_CHARACTERS:int = 320;
 
@@ -76,12 +84,30 @@ package grimoire
         private var background:Shape;
         private var chrome:Sprite;
         private var chromeCanvas:Shape;
+        private var botWorkspaceCanvas:Shape;
         private var sidebarContent:Sprite;
         private var rightRailContent:Sprite;
+        private var botInspectorContent:Sprite;
         private var toggleButton:Sprite;
         private var cielImageFrame:Sprite;
         private var cielSkillLoader:Loader;
         private var cielTooltip:Sprite;
+        private var cielMenu:Sprite;
+        private var cielMenuExpanded:Boolean;
+        private var roomOverlay:Sprite;
+        private var roomOverlayVisible:Boolean;
+        private var roomCellInput:TextField;
+        private var roomPadInput:TextField;
+        private var roomCellDraft:String = "";
+        private var roomPadDraft:String = "";
+        private var roomCurrentCell:String = "-";
+        private var roomCurrentPad:String = "-";
+        private var roomCurrentPosition:String = "-";
+        private var roomCells:Array = [];
+        private var roomPads:Array = [];
+        private var roomCellPageStart:int;
+        private var roomPadPageStart:int;
+        private var roomMessage:String = "";
         private var cielTooltipTimer:uint;
         private var cielDragging:Boolean;
         private var cielDragMoved:Boolean;
@@ -106,6 +132,8 @@ package grimoire
         private var botCommandPageStart:int;
         private var botTemplatePageStart:int;
         private var botPropertyPageStart:int;
+        private var botActionPageStart:int;
+        private var botConfigurationPageStart:int;
         private var botFileName:String = "Untitled Bot";
         private var botEditorCreatesCopy:Boolean;
         private var botDiscardArmedAt:int;
@@ -133,7 +161,16 @@ package grimoire
         private var packetEntries:Array = [];
         private var packetDraft:String = "";
         private var packetInput:TextField;
+        private var keyboardPreview:Sprite;
+        private var keyboardPreviewLabel:TextField;
+        private var keyboardPreviewValue:TextField;
+        private var keyboardInput:TextField;
+        private var keyboardInputLabel:String = "";
+        private var keyboardStage:Stage;
         private var feedbackMessage:String = "";
+        private var botStateRenderTimer:uint;
+        private var lastBotRenderAt:int;
+        private var lastRunnerState:String = "";
 
         private var targetToggleX:Number;
         private var targetToggleY:Number;
@@ -192,6 +229,8 @@ package grimoire
 
             this.chromeCanvas = new Shape();
             this.chrome.addChild(this.chromeCanvas);
+            this.botWorkspaceCanvas = new Shape();
+            this.chrome.addChild(this.botWorkspaceCanvas);
             this.drawChrome();
             this.buildTopNavigation();
             this.buildProfileCard();
@@ -205,6 +244,11 @@ package grimoire
             this.rightRailContent.x = this.rightRailX + 8;
             this.rightRailContent.y = VIEW_Y + 14;
             this.chrome.addChild(this.rightRailContent);
+
+            this.botInspectorContent = new Sprite();
+            this.botInspectorContent.x = 668;
+            this.botInspectorContent.y = VIEW_Y + 14;
+            this.chrome.addChild(this.botInspectorContent);
             this.renderSidebar(this.selectedNavigation);
             this.configureRunner();
 
@@ -214,6 +258,17 @@ package grimoire
             this.cielTooltip = this.createCielTooltip();
             addChild(this.cielTooltip);
 
+            this.cielMenu = this.createCielMenu();
+            addChild(this.cielMenu);
+
+            this.roomOverlay = new Sprite();
+            this.roomOverlay.visible = false;
+            addChild(this.roomOverlay);
+
+            this.keyboardPreview = this.createKeyboardPreview();
+            addChild(this.keyboardPreview);
+
+            addEventListener(Event.ADDED_TO_STAGE, this.onAddedToStage);
             addEventListener(Event.REMOVED_FROM_STAGE, this.onRemovedFromStage);
 
             this.calculateTargets();
@@ -284,6 +339,17 @@ package grimoire
 
         public function handleBack():Boolean
         {
+            if (this.roomOverlayVisible)
+            {
+                this.closeRoomOverlay();
+                return true;
+            }
+            if (this.cielMenuExpanded)
+            {
+                this.cielMenuExpanded = false;
+                this.updateOverlayControls();
+                return true;
+            }
             if (!this.chromeVisible)
             {
                 this.toggleChrome();
@@ -334,6 +400,11 @@ package grimoire
             if (!connected && this.botRunner != null && this.botRunner.isRunning)
             {
                 this.botRunner.stop("BOT STOPPED: CLIENT DISCONNECTED");
+            }
+            if (!connected)
+            {
+                this.cielMenuExpanded = false;
+                this.roomOverlayVisible = false;
             }
             if (connected)
             {
@@ -705,8 +776,10 @@ package grimoire
             removeEventListener(Event.ENTER_FRAME, this.animateSection);
             this.sidebarContent.x = 16;
             this.rightRailContent.x = this.rightRailX + 8;
+            this.botInspectorContent.x = 668;
             this.sidebarContent.alpha = 1;
             this.rightRailContent.alpha = 1;
+            this.botInspectorContent.alpha = 1;
             if (this.preferences.reducedMotion)
             {
                 return;
@@ -714,8 +787,10 @@ package grimoire
             this.sectionAnimationStartedAt = getTimer();
             this.sidebarContent.x = 8;
             this.rightRailContent.x = this.rightRailX + 16;
+            this.botInspectorContent.x = 676;
             this.sidebarContent.alpha = 0;
             this.rightRailContent.alpha = 0;
+            this.botInspectorContent.alpha = 0;
             addEventListener(Event.ENTER_FRAME, this.animateSection);
         }
 
@@ -726,14 +801,18 @@ package grimoire
             var eased:Number = 1 - Math.pow(1 - progress, 3);
             this.sidebarContent.x = 8 + (8 * eased);
             this.rightRailContent.x = this.rightRailX + 16 - (8 * eased);
+            this.botInspectorContent.x = 676 - (8 * eased);
             this.sidebarContent.alpha = eased;
             this.rightRailContent.alpha = eased;
+            this.botInspectorContent.alpha = eased;
             if (progress >= 1)
             {
                 this.sidebarContent.x = 16;
                 this.rightRailContent.x = this.rightRailX + 8;
+                this.botInspectorContent.x = 668;
                 this.sidebarContent.alpha = 1;
                 this.rightRailContent.alpha = 1;
+                this.botInspectorContent.alpha = 1;
                 removeEventListener(Event.ENTER_FRAME, this.animateSection);
             }
         }
@@ -744,6 +823,11 @@ package grimoire
             {
                 this.sidebarContent.removeChildAt(0);
             }
+            while (this.botInspectorContent.numChildren > 0)
+            {
+                this.botInspectorContent.removeChildAt(0);
+            }
+            this.renderBotWorkspaceFrame(section == "Bot");
 
             this.addText(this.sidebarContent, section.toUpperCase(), 3, 0, 274, 21, 11, PRIMARY_TEXT, true);
             this.addText(this.sidebarContent, this.sectionSubtitle(section), 3, 19, 274, 23, 9, SECONDARY_TEXT, false);
@@ -791,7 +875,23 @@ package grimoire
                     true, "_sans", TextFormatAlign.CENTER);
             }
 			this.renderRightRail(section);
+			if (section == "Bot")
+			{
+				this.renderBotInspector();
+			}
 			this.feedbackMessage = "";
+        }
+
+        private function renderBotWorkspaceFrame(visible:Boolean):void
+        {
+            this.botWorkspaceCanvas.graphics.clear();
+            this.botInspectorContent.visible = visible;
+            if (!visible)
+            {
+                return;
+            }
+            this.drawPanel(this.botWorkspaceCanvas, 660, VIEW_Y, 292,
+                this.layoutHeight - VIEW_Y - MARGIN, 14, SURFACE, DIVIDER, 1);
         }
 
         private function renderRightRail(section:String):void
@@ -921,6 +1021,174 @@ package grimoire
                 184, 295, 84, 31));
         }
 
+        private function renderBotInspector():void
+        {
+            if (this.botMode == "editor")
+            {
+                this.renderBotConfigurationInspector();
+                return;
+            }
+
+            this.addText(this.botInspectorContent, this.botMode == "templates"
+                ? "COMMAND LIBRARY" : "BOT ACTIONS", 3, 0, 276, 21,
+                11, PRIMARY_TEXT, true);
+            if (this.botMode == "templates")
+            {
+                this.addText(this.botInspectorContent,
+                    "Desktop-compatible actions grouped by behavior", 3, 19, 276, 18,
+                    8, SECONDARY_TEXT, false);
+                this.drawBotInspectorCard(50, "SAFE INSERTION",
+                    "New actions are inserted after the selected command. Existing unknown fields and command types remain unchanged.",
+                    PALE_VIOLET);
+                this.drawBotInspectorCard(145, "EDIT AFTER ADD",
+                    "Select a template on the left, then edit every primitive field in the middle panel before saving.",
+                    SUCCESS);
+                return;
+            }
+
+            var showRunnerCommands:Boolean = this.botRunner.isRunning
+                || this.botRunner.status.indexOf("ERROR") >= 0
+                || this.botRunner.status.indexOf("UNSUPPORTED") >= 0;
+            var commands:Array = showRunnerCommands ? this.botRunner.commandSnapshot : null;
+            if (commands == null || commands.length == 0)
+            {
+                var document:Object = this.botLibrary.selectedDocument;
+                commands = document == null ? [] : document.mobileCommands as Array;
+            }
+            if (commands == null)
+            {
+                commands = [];
+            }
+
+            var activeIndex:int = showRunnerCommands ? this.botRunner.currentCommandIndex : -1;
+            var maximumStart:int = this.maximumPageStart(commands.length, BOT_ACTION_PAGE_SIZE);
+            this.botActionPageStart = Math.max(0, Math.min(maximumStart, this.botActionPageStart));
+            if (activeIndex >= 0 && (activeIndex < this.botActionPageStart
+                || activeIndex >= this.botActionPageStart + BOT_ACTION_PAGE_SIZE))
+            {
+                this.botActionPageStart = Math.min(maximumStart,
+                    Math.floor(activeIndex / BOT_ACTION_PAGE_SIZE) * BOT_ACTION_PAGE_SIZE);
+            }
+
+            var progress:String = activeIndex < 0 ? "READY"
+                : "ACTION " + (activeIndex + 1) + " / " + commands.length;
+            this.addText(this.botInspectorContent, progress, 3, 19, 276, 18,
+                8, this.botRunner.isRunning ? SUCCESS : SECONDARY_TEXT, true);
+
+            var y:Number = 43;
+            for (var i:int = this.botActionPageStart;
+                i < commands.length && i < this.botActionPageStart + BOT_ACTION_PAGE_SIZE; i++)
+            {
+                this.botInspectorContent.addChild(this.createBotActionRow(i,
+                    this.botEditor.commandSummary(commands[i]), y, i == activeIndex));
+                y += 36;
+            }
+            if (commands.length == 0)
+            {
+                this.drawBotInspectorCard(54, "NO ACTIONS",
+                    "Select or import a GBot. Its ordered desktop action list will appear here and follow execution live.",
+                    SECONDARY_TEXT);
+            }
+
+            var firstShown:int = commands.length == 0 ? 0 : this.botActionPageStart + 1;
+            var lastShown:int = Math.min(commands.length,
+                this.botActionPageStart + BOT_ACTION_PAGE_SIZE);
+            this.botInspectorContent.addChild(this.createAction("bot_actions_previous", "‹",
+                0, 342, 42, 27));
+            this.addText(this.botInspectorContent,
+                commands.length == 0 ? "NO ACTIONS" : firstShown + "–" + lastShown + " / " + commands.length,
+                49, 347, 186, 17, 8, SECONDARY_TEXT, true, "_sans", TextFormatAlign.CENTER);
+            this.botInspectorContent.addChild(this.createAction("bot_actions_next", "›",
+                242, 342, 42, 27));
+            this.drawBotInspectorCard(379, this.botRunner.isRunning ? "ACTIVE ACTION" : "ACTION LIST",
+                activeIndex >= 0 && activeIndex < commands.length
+                    ? this.botEditor.commandSummary(commands[activeIndex])
+                    : "Tap an action to open its desktop-compatible fields for editing.",
+                this.botRunner.isRunning ? SUCCESS : PALE_VIOLET, 57);
+        }
+
+        private function renderBotConfigurationInspector():void
+        {
+            var definitions:Array = this.botEditor.configurationFields;
+            var maximumStart:int = this.maximumPageStart(definitions.length,
+                BOT_CONFIGURATION_PAGE_SIZE);
+            this.botConfigurationPageStart = Math.max(0,
+                Math.min(maximumStart, this.botConfigurationPageStart));
+            var firstDefinition:Object = definitions.length == 0 ? null
+                : definitions[this.botConfigurationPageStart];
+            this.addText(this.botInspectorContent, "BOT OPTIONS", 3, 0, 276, 21,
+                11, PRIMARY_TEXT, true);
+            this.addText(this.botInspectorContent,
+                firstDefinition == null ? "Desktop configuration"
+                    : String(firstDefinition.category).toUpperCase() + "  •  DESKTOP CONFIGURATION",
+                3, 19, 276, 18, 8, PALE_VIOLET, true);
+
+            var y:Number = 43;
+            for (var i:int = this.botConfigurationPageStart;
+                i < definitions.length
+                    && i < this.botConfigurationPageStart + BOT_CONFIGURATION_PAGE_SIZE; i++)
+            {
+                var definition:Object = definitions[i];
+                var value:* = this.botEditor.configurationValue(i);
+                if (definition.type == "bool")
+                {
+                    this.botInspectorContent.addChild(this.createAction("bot_config_toggle_" + i,
+                        (value === true ? "✓  " : "○  ") + String(definition.label),
+                        0, y, 284, 43, TextFormatAlign.LEFT));
+                }
+                else
+                {
+                    this.addBotInput(this.botInspectorContent, "bot_config_" + i,
+                        String(definition.label) + "  (" + definition.minimum + "–"
+                            + definition.maximum + ")", String(value), y, 284);
+                }
+                y += 53;
+            }
+
+            var firstShown:int = definitions.length == 0 ? 0 : this.botConfigurationPageStart + 1;
+            var lastShown:int = Math.min(definitions.length,
+                this.botConfigurationPageStart + BOT_CONFIGURATION_PAGE_SIZE);
+            this.botInspectorContent.addChild(this.createAction("bot_config_previous", "‹",
+                0, 401, 42, 27));
+            this.addText(this.botInspectorContent, firstShown + "–" + lastShown + " / " + definitions.length,
+                49, 406, 186, 17, 8, SECONDARY_TEXT, true, "_sans", TextFormatAlign.CENTER);
+            this.botInspectorContent.addChild(this.createAction("bot_config_next", "›",
+                242, 401, 42, 27));
+        }
+
+        private function createBotActionRow(index:int, label:String, y:Number,
+            active:Boolean):Sprite
+        {
+            var button:Sprite = new Sprite();
+            button.name = "bot_action_select_" + index;
+            button.x = 0;
+            button.y = y;
+            button.buttonMode = true;
+            button.useHandCursor = true;
+            button.graphics.beginFill(active ? 0x16251D : CONTROL, 0.98);
+            button.graphics.lineStyle(active ? 2 : 1, active ? SUCCESS : DIVIDER, 1);
+            button.graphics.drawRoundRect(0, 0, 284, 32, 9, 9);
+            button.graphics.endFill();
+            this.addText(button, (active ? "▶  " : String(index + 1) + ".  ")
+                + this.ellipsize(label, 36), 10, 7, 264, 18, 8,
+                active ? SUCCESS : PRIMARY_TEXT, true, "_sans", TextFormatAlign.LEFT);
+            button.addEventListener(MouseEvent.CLICK, this.onCommandClick);
+            return button;
+        }
+
+        private function drawBotInspectorCard(y:Number, title:String, body:String,
+            accent:uint, height:Number = 82):void
+        {
+            var card:Shape = new Shape();
+            this.drawPanel(card, 0, y, 284, height, 11, ELEVATED, accent, 0.8);
+            this.botInspectorContent.addChild(card);
+            this.addText(this.botInspectorContent, title, 11, y + 9, 262, 18,
+                10, accent, true);
+            var bodyField:TextField = this.addText(this.botInspectorContent, body,
+                11, y + 29, 262, height - 35, 8, PRIMARY_TEXT, false);
+            bodyField.wordWrap = true;
+        }
+
         private function renderBotPropertyEditor():void
         {
             var command:Object = this.botEditor.selectedCommand;
@@ -998,8 +1266,183 @@ package grimoire
             input.maxChars = 512;
             input.text = value == null ? "" : value;
             input.addEventListener(Event.CHANGE, this.onBotEditorInputChanged);
+            this.registerKeyboardInput(input, label);
             parent.addChild(input);
             return input;
+        }
+
+        private function registerKeyboardInput(input:TextField, label:String):void
+        {
+            if (input == null)
+            {
+                return;
+            }
+            input.addEventListener(FocusEvent.FOCUS_IN, this.onKeyboardFocusIn);
+            input.addEventListener(FocusEvent.FOCUS_OUT, this.onKeyboardFocusOut);
+        }
+
+        private function onKeyboardFocusIn(event:FocusEvent):void
+        {
+            var input:TextField = event.target as TextField;
+            if (input == null)
+            {
+                return;
+            }
+            this.keyboardInput = input;
+            this.keyboardInputLabel = this.keyboardLabelFor(input);
+            this.updateKeyboardPreview(input);
+        }
+
+        private function onKeyboardFocusOut(event:FocusEvent):void
+        {
+            if (event.target === this.keyboardInput)
+            {
+                this.keyboardInput = null;
+                this.keyboardInputLabel = "";
+                this.hideKeyboardPreview();
+            }
+        }
+
+        private function keyboardLabelFor(input:TextField):String
+        {
+            if (input == null || input.name == null)
+            {
+                return "INPUT";
+            }
+            if (input.displayAsPassword) return "PASSWORD";
+            if (input.name == "ni") return "USERNAME";
+            if (input.name == "packet_draft") return "PACKET";
+            if (input.name == "room_cell") return "ROOM CELL";
+            if (input.name == "room_pad") return "ROOM PAD";
+            if (input.name == "bot_filename") return "BOT FILE NAME";
+            if (input.name.indexOf("bot_metadata_") == 0)
+            {
+                return input.name.substr("bot_metadata_".length).replace(/_/g, " ").toUpperCase();
+            }
+            if (input.name.indexOf("bot_property_") == 0)
+            {
+                return input.name.substr("bot_property_".length).replace(/_/g, " ").toUpperCase();
+            }
+            if (input.name.indexOf("bot_config_") == 0) return "BOT CONFIGURATION";
+            return input.name.replace(/_/g, " ").toUpperCase();
+        }
+
+        private function createKeyboardPreview():Sprite
+        {
+            var preview:Sprite = new Sprite();
+            preview.mouseEnabled = false;
+            preview.mouseChildren = false;
+            preview.visible = false;
+
+            var panel:Shape = new Shape();
+            this.drawPanel(panel, 0, 0, 560, 46, 11, SURFACE, BRIGHT_VIOLET, 0.95);
+            preview.addChild(panel);
+            this.keyboardPreviewLabel = this.addText(preview, "INPUT", 12, 6, 128, 15,
+                8, PALE_VIOLET, true);
+            this.keyboardPreviewValue = this.addText(preview, "", 12, 21, 536, 18,
+                10, PRIMARY_TEXT, false);
+            return preview;
+        }
+
+        private function updateKeyboardPreview(input:TextField = null):void
+        {
+            if (input != null && input !== this.keyboardInput)
+            {
+                return;
+            }
+            if (this.keyboardInput == null || this.keyboardPreview == null)
+            {
+                return;
+            }
+            this.keyboardPreviewLabel.text = this.keyboardInputLabel.length == 0
+                ? "INPUT" : this.keyboardInputLabel;
+            this.keyboardPreviewValue.text = this.ellipsize(
+                this.keyboardInput.displayAsPassword
+                    ? this.maskedKeyboardValue(this.keyboardInput.text) : this.keyboardInput.text,
+                92);
+            this.keyboardPreview.visible = true;
+            this.positionKeyboardPreview();
+            if (this.keyboardPreview.parent == this)
+            {
+                setChildIndex(this.keyboardPreview, numChildren - 1);
+            }
+        }
+
+        private function positionKeyboardPreview():void
+        {
+            if (this.keyboardPreview == null)
+            {
+                return;
+            }
+            var previewWidth:Number = 560;
+            var previewY:Number = this.layoutHeight - 54;
+            if (stage != null)
+            {
+                var keyboardRect:Rectangle = stage.softKeyboardRect;
+                if (keyboardRect != null && keyboardRect.height > 0)
+                {
+                    var keyboardTop:Point = globalToLocal(new Point(keyboardRect.x, keyboardRect.y));
+                    previewY = keyboardTop.y - 50;
+                }
+            }
+            this.keyboardPreview.x = Math.max(8, (this.layoutWidth - previewWidth) / 2);
+            this.keyboardPreview.y = Math.max(8, Math.min(this.layoutHeight - 54, previewY));
+        }
+
+        private function hideKeyboardPreview():void
+        {
+            if (this.keyboardPreview != null)
+            {
+                this.keyboardPreview.visible = false;
+            }
+        }
+
+        private function onAddedToStage(event:Event):void
+        {
+            if (this.keyboardStage == stage || stage == null)
+            {
+                return;
+            }
+            this.keyboardStage = stage;
+            this.keyboardStage.addEventListener(FocusEvent.FOCUS_IN,
+                this.onKeyboardFocusIn, true);
+            this.keyboardStage.addEventListener(FocusEvent.FOCUS_OUT,
+                this.onKeyboardFocusOut, true);
+            this.keyboardStage.addEventListener(Event.CHANGE,
+                this.onKeyboardStageChange, true);
+            this.keyboardStage.addEventListener(SoftKeyboardEvent.SOFT_KEYBOARD_ACTIVATE,
+                this.onSoftKeyboardActivate, true);
+            this.keyboardStage.addEventListener(SoftKeyboardEvent.SOFT_KEYBOARD_DEACTIVATE,
+                this.onSoftKeyboardDeactivate, true);
+        }
+
+        private function onSoftKeyboardActivate(event:SoftKeyboardEvent):void
+        {
+            this.updateKeyboardPreview();
+        }
+
+        private function onSoftKeyboardDeactivate(event:SoftKeyboardEvent):void
+        {
+            this.hideKeyboardPreview();
+        }
+
+        private function onKeyboardStageChange(event:Event):void
+        {
+            if (event.target === this.keyboardInput)
+            {
+                this.updateKeyboardPreview(this.keyboardInput);
+            }
+        }
+
+        private function maskedKeyboardValue(value:String):String
+        {
+            var masked:String = "";
+            var length:int = value == null ? 0 : Math.min(value.length, 92);
+            for (var i:int = 0; i < length; i++)
+            {
+                masked += "•";
+            }
+            return masked;
         }
 
         private function drawRailCard(y:Number, title:String, body:String, accent:uint):void
@@ -1083,6 +1526,7 @@ package grimoire
             }
 
             this.packetInput = new TextField();
+            this.packetInput.name = "packet_draft";
             this.packetInput.type = TextFieldType.INPUT;
             this.packetInput.defaultTextFormat = new TextFormat("_sans", 9, PRIMARY_TEXT);
             this.packetInput.background = true;
@@ -1098,6 +1542,7 @@ package grimoire
             this.packetInput.height = 62;
             this.packetInput.text = this.packetDraft;
             this.packetInput.addEventListener(Event.CHANGE, this.onPacketDraftChanged);
+            this.registerKeyboardInput(this.packetInput, "PACKET");
             this.sidebarContent.addChild(this.packetInput);
 
             this.sidebarContent.addChild(this.createAction("packet_use_last", "USE LAST", 0, 247, 90, 27));
@@ -1406,7 +1851,64 @@ package grimoire
         private function onCommandClick(e:MouseEvent):void
         {
             var id:String = Sprite(e.currentTarget).name;
-            if (id == "header_play" || id == "command_start" || id == "bot_start")
+            if (id == "ciel_open_overlay")
+            {
+                this.cielMenuExpanded = false;
+                this.openOverlay();
+            }
+            else if (id == "ciel_open_room")
+            {
+                this.openRoomOverlay();
+            }
+            else if (id == "room_close")
+            {
+                this.closeRoomOverlay();
+            }
+            else if (id == "room_refresh")
+            {
+                this.roomMessage = "";
+                this.refreshRoomState(false);
+                this.renderRoomOverlay();
+            }
+            else if (id == "room_move")
+            {
+                this.moveToRoomDraft();
+            }
+            else if (id == "room_cell_value_previous" || id == "room_cell_value_next")
+            {
+                this.roomCellPageStart = id == "room_cell_value_previous"
+                    ? Math.max(0, this.roomCellPageStart - ROOM_VALUE_PAGE_SIZE)
+                    : Math.min(this.maximumPageStart(this.roomCells.length, ROOM_VALUE_PAGE_SIZE),
+                        this.roomCellPageStart + ROOM_VALUE_PAGE_SIZE);
+                this.renderRoomOverlay();
+            }
+            else if (id == "room_pad_value_previous" || id == "room_pad_value_next")
+            {
+                this.roomPadPageStart = id == "room_pad_value_previous"
+                    ? Math.max(0, this.roomPadPageStart - ROOM_VALUE_PAGE_SIZE)
+                    : Math.min(this.maximumPageStart(this.roomPads.length, ROOM_VALUE_PAGE_SIZE),
+                        this.roomPadPageStart + ROOM_VALUE_PAGE_SIZE);
+                this.renderRoomOverlay();
+            }
+            else if (id.indexOf("room_cell_value_") == 0)
+            {
+                var cellIndex:int = int(id.substr("room_cell_value_".length));
+                if (cellIndex >= 0 && cellIndex < this.roomCells.length)
+                {
+                    this.roomCellDraft = String(this.roomCells[cellIndex]);
+                    this.renderRoomOverlay();
+                }
+            }
+            else if (id.indexOf("room_pad_value_") == 0)
+            {
+                var padIndex:int = int(id.substr("room_pad_value_".length));
+                if (padIndex >= 0 && padIndex < this.roomPads.length)
+                {
+                    this.roomPadDraft = String(this.roomPads[padIndex]);
+                    this.renderRoomOverlay();
+                }
+            }
+            else if (id == "header_play" || id == "command_start" || id == "bot_start")
             {
                 this.startSelectedBot();
             }
@@ -1481,12 +1983,18 @@ package grimoire
             }
             else if (id == "bot_new")
             {
+                if (this.botRunner.isRunning)
+                {
+                    this.botLibraryStatus("STOP THE RUNNING BOT BEFORE EDITING");
+                    return;
+                }
                 this.botEditor.createNew();
                 this.botFileName = "Untitled Bot";
                 this.botEditorCreatesCopy = true;
                 this.botMode = "editor";
                 this.botCommandPageStart = 0;
                 this.botPropertyPageStart = 0;
+                this.botConfigurationPageStart = 0;
                 this.renderSidebar("Bot");
             }
             else if (id == "bot_import")
@@ -1510,11 +2018,22 @@ package grimoire
             }
             else if (id == "bot_delete")
             {
-                this.botLibrary.deleteSelected();
+                if (this.botRunner.isRunning)
+                {
+                    this.botLibraryStatus("STOP THE RUNNING BOT BEFORE DELETING IT");
+                }
+                else
+                {
+                    this.botLibrary.deleteSelected();
+                }
             }
             else if (id == "bot_edit")
             {
-                if (this.botLibrary.selectedDocument == null)
+                if (this.botRunner.isRunning)
+                {
+                    this.botLibraryStatus("STOP THE RUNNING BOT BEFORE EDITING");
+                }
+                else if (this.botLibrary.selectedDocument == null)
                 {
                     this.botLibraryStatus("SELECT A BOT BEFORE EDITING");
                 }
@@ -1527,6 +2046,7 @@ package grimoire
                     this.botMode = "editor";
                     this.botCommandPageStart = 0;
                     this.botPropertyPageStart = 0;
+                    this.botConfigurationPageStart = 0;
                     this.renderSidebar("Bot");
                 }
             }
@@ -1642,6 +2162,56 @@ package grimoire
                     this.maximumPageStart(this.botEditor.selectedPropertyNames().length,
                         BOT_PROPERTY_PAGE_SIZE),
                     this.botPropertyPageStart + BOT_PROPERTY_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_actions_previous")
+            {
+                this.botActionPageStart = Math.max(0,
+                    this.botActionPageStart - BOT_ACTION_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_actions_next")
+            {
+                this.botActionPageStart += BOT_ACTION_PAGE_SIZE;
+                this.renderSidebar("Bot");
+            }
+            else if (id.indexOf("bot_action_select_") == 0)
+            {
+                if (this.botRunner.isRunning)
+                {
+                    this.botLibraryStatus("ACTIVE ACTIONS ARE READ-ONLY WHILE THE BOT RUNS");
+                }
+                else if (this.botLibrary.selectedDocument != null)
+                {
+                    this.botEditor.load(this.botLibrary.selectedDocument);
+                    this.botEditor.select(int(id.substr("bot_action_select_".length)));
+                    this.botFileName = this.botLibrary.selectedEntry == null
+                        ? "Untitled Bot" : String(this.botLibrary.selectedEntry.name);
+                    this.botEditorCreatesCopy = false;
+                    this.botMode = "editor";
+                    this.botPropertyPageStart = 0;
+                    this.botConfigurationPageStart = 0;
+                    this.renderSidebar("Bot");
+                }
+            }
+            else if (id == "bot_config_previous")
+            {
+                this.botConfigurationPageStart = Math.max(0,
+                    this.botConfigurationPageStart - BOT_CONFIGURATION_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id == "bot_config_next")
+            {
+                this.botConfigurationPageStart = Math.min(
+                    this.maximumPageStart(this.botEditor.configurationFields.length,
+                        BOT_CONFIGURATION_PAGE_SIZE),
+                    this.botConfigurationPageStart + BOT_CONFIGURATION_PAGE_SIZE);
+                this.renderSidebar("Bot");
+            }
+            else if (id.indexOf("bot_config_toggle_") == 0)
+            {
+                this.botEditor.toggleConfigurationValue(
+                    int(id.substr("bot_config_toggle_".length)));
                 this.renderSidebar("Bot");
             }
             else if (id.indexOf("bot_select_") == 0)
@@ -1769,7 +2339,13 @@ package grimoire
             {
                 accepted = this.botEditor.setSelectedProperty(input.name.substr(13), input.text);
             }
+            else if (input.name.indexOf("bot_config_") == 0)
+            {
+                accepted = this.botEditor.setConfigurationValue(
+                    int(input.name.substr("bot_config_".length)), input.text);
+            }
             input.borderColor = accepted ? DIVIDER : DANGER;
+            this.updateKeyboardPreview(input);
         }
 
         private function createToggleButton():Sprite
@@ -1845,6 +2421,309 @@ package grimoire
             return tooltip;
         }
 
+        private function createCielMenu():Sprite
+        {
+            var menu:Sprite = new Sprite();
+            menu.visible = false;
+
+            var panel:Shape = new Shape();
+            this.drawPanel(panel, 0, 0, 190, 92, 12, SURFACE, BRIGHT_VIOLET, 0.92);
+            menu.addChild(panel);
+            this.addText(menu, "CIEL ACTIONS", 10, 7, 170, 15,
+                8, PALE_VIOLET, true, "_sans", TextFormatAlign.CENTER);
+            menu.addChild(this.createAction("ciel_open_overlay", "CIEL OVERLAY",
+                8, 27, 174, 25));
+            menu.addChild(this.createAction("ciel_open_room", "ROOM OVERLAY",
+                8, 59, 174, 25));
+            return menu;
+        }
+
+        private function openRoomOverlay():void
+        {
+            if (!this.gameConnected || this.chromeVisible)
+            {
+                return;
+            }
+            this.cielMenuExpanded = false;
+            this.roomOverlayVisible = true;
+            this.roomMessage = "";
+            this.refreshRoomState(true);
+            this.renderRoomOverlay();
+            this.updateOverlayControls();
+        }
+
+        private function closeRoomOverlay():void
+        {
+            this.roomOverlayVisible = false;
+            this.roomMessage = "";
+            if (this.roomOverlay != null)
+            {
+                this.roomOverlay.visible = false;
+            }
+            if (this.keyboardInput === this.roomCellInput || this.keyboardInput === this.roomPadInput)
+            {
+                this.keyboardInput = null;
+                this.hideKeyboardPreview();
+            }
+            this.updateOverlayControls();
+        }
+
+        private function refreshRoomState(resetDrafts:Boolean = false):void
+        {
+            if (!this.gameConnected)
+            {
+                return;
+            }
+            try
+            {
+                this.roomCurrentCell = this.decodeJsonString(HostBridge.invoke("Cell"), "-");
+                this.roomCurrentPad = this.decodeJsonString(HostBridge.invoke("Pad"), "Spawn");
+                var position:Array = this.decodeJsonArray(HostBridge.invoke("Position"));
+                this.roomCurrentPosition = position.length >= 2
+                    ? "X " + int(Number(position[0])) + "  Y " + int(Number(position[1])) : "-";
+                this.roomCells = this.uniqueRoomValues(this.decodeJsonArray(HostBridge.invoke("GetCells")));
+                this.roomPads = this.uniqueRoomValues(this.decodeJsonArray(HostBridge.invoke("GetPads")));
+                if (resetDrafts || this.roomCellDraft.length == 0)
+                {
+                    this.roomCellDraft = this.roomCurrentCell;
+                }
+                if (resetDrafts || this.roomPadDraft.length == 0)
+                {
+                    this.roomPadDraft = this.roomCurrentPad;
+                }
+                this.roomCellPageStart = Math.min(this.roomCellPageStart,
+                    this.maximumPageStart(this.roomCells.length, ROOM_VALUE_PAGE_SIZE));
+                this.roomPadPageStart = Math.min(this.roomPadPageStart,
+                    this.maximumPageStart(this.roomPads.length, ROOM_VALUE_PAGE_SIZE));
+            }
+            catch (error:Error)
+            {
+                this.roomMessage = "ROOM DATA IS TEMPORARILY UNAVAILABLE";
+            }
+        }
+
+        private function renderRoomOverlay():void
+        {
+            if (this.roomOverlay == null)
+            {
+                return;
+            }
+            while (this.roomOverlay.numChildren > 0)
+            {
+                this.roomOverlay.removeChildAt(0);
+            }
+
+            var panel:Shape = new Shape();
+            this.drawPanel(panel, 0, 0, ROOM_PANEL_WIDTH, ROOM_PANEL_HEIGHT,
+                14, SURFACE, BRIGHT_VIOLET, 0.96);
+            this.roomOverlay.addChild(panel);
+            this.addText(this.roomOverlay, "ROOM OVERLAY", 12, 10, 188, 18,
+                12, PRIMARY_TEXT, true);
+            this.roomOverlay.addChild(this.createAction("room_refresh", "REFRESH",
+                218, 8, 76, 25));
+            this.roomOverlay.addChild(this.createAction("room_close", "×",
+                301, 8, 28, 25));
+
+            this.addText(this.roomOverlay,
+                "CELL " + this.ellipsize(this.roomCurrentCell, 22)
+                    + "  •  PAD " + this.ellipsize(this.roomCurrentPad, 18),
+                12, 40, 316, 17, 9, PALE_VIOLET, true);
+            this.addText(this.roomOverlay,
+                this.roomMessage.length == 0 ? this.roomCurrentPosition : this.roomMessage,
+                12, 57, 316, 17, 8,
+                this.roomMessage.length == 0 ? SECONDARY_TEXT : DANGER, false);
+
+            this.addText(this.roomOverlay, "CELL", 12, 80, 150, 14,
+                8, SECONDARY_TEXT, true);
+            this.addText(this.roomOverlay, "PAD / POSITION", 176, 80, 150, 14,
+                8, SECONDARY_TEXT, true);
+            this.roomCellInput = this.createRoomInput("room_cell", this.roomCellDraft,
+                12, 96, 152);
+            this.roomPadInput = this.createRoomInput("room_pad", this.roomPadDraft,
+                176, 96, 152);
+            this.roomOverlay.addChild(this.createAction("room_move", "MOVE TO CELL / PAD",
+                12, 130, 316, 30));
+
+            this.renderRoomValueGrid("MAP CELLS", this.roomCells, this.roomCellPageStart,
+                174, "room_cell_value_");
+            this.renderRoomValueGrid("CURRENT CELL PADS", this.roomPads, this.roomPadPageStart,
+                292, "room_pad_value_");
+
+            this.roomOverlay.visible = this.roomOverlayVisible && this.gameConnected
+                && !this.chromeVisible;
+            this.positionCielSurfaces();
+            if (this.roomOverlay.parent == this)
+            {
+                setChildIndex(this.roomOverlay, numChildren - 1);
+            }
+            if (this.keyboardPreview != null && this.keyboardPreview.visible)
+            {
+                setChildIndex(this.keyboardPreview, numChildren - 1);
+            }
+        }
+
+        private function createRoomInput(name:String, value:String, x:Number, y:Number,
+            width:Number):TextField
+        {
+            var input:TextField = new TextField();
+            input.name = name;
+            input.type = TextFieldType.INPUT;
+            input.defaultTextFormat = new TextFormat("_sans", 10, PRIMARY_TEXT);
+            input.background = true;
+            input.backgroundColor = CONTROL;
+            input.border = true;
+            input.borderColor = DIVIDER;
+            input.x = x;
+            input.y = y;
+            input.width = width;
+            input.height = 27;
+            input.maxChars = 64;
+            input.text = value == null ? "" : value;
+            input.addEventListener(Event.CHANGE, this.onRoomInputChanged);
+            this.registerKeyboardInput(input, name == "room_cell" ? "ROOM CELL" : "ROOM PAD");
+            this.roomOverlay.addChild(input);
+            return input;
+        }
+
+        private function renderRoomValueGrid(title:String, values:Array, start:int,
+            y:Number, idPrefix:String):void
+        {
+            this.addText(this.roomOverlay, title, 12, y, 226, 16,
+                8, SECONDARY_TEXT, true);
+            var safeValues:Array = values == null ? [] : values;
+            var last:int = Math.min(safeValues.length, start + ROOM_VALUE_PAGE_SIZE);
+            for (var i:int = start; i < last; i++)
+            {
+                var slot:int = i - start;
+                var x:Number = 12 + ((slot % 3) * 104);
+                var rowY:Number = y + 20 + (int(slot / 3) * 31);
+                this.roomOverlay.addChild(this.createAction(idPrefix + i,
+                    this.ellipsize(String(safeValues[i]), 14), x, rowY, 96, 25));
+            }
+            if (safeValues.length == 0)
+            {
+                this.addText(this.roomOverlay, "No values reported by this map.",
+                    12, y + 27, 316, 18, 8, SECONDARY_TEXT, false);
+            }
+            var navY:Number = y + 83;
+            this.roomOverlay.addChild(this.createAction(idPrefix + "previous", "‹",
+                12, navY, 34, 23));
+            this.addText(this.roomOverlay,
+                safeValues.length == 0 ? "0" : (start + 1) + "–" + last + " / " + safeValues.length,
+                52, navY + 3, 236, 17, 8, SECONDARY_TEXT, true,
+                "_sans", TextFormatAlign.CENTER);
+            this.roomOverlay.addChild(this.createAction(idPrefix + "next", "›",
+                294, navY, 34, 23));
+        }
+
+        private function onRoomInputChanged(event:Event):void
+        {
+            var input:TextField = event.currentTarget as TextField;
+            if (input == null)
+            {
+                return;
+            }
+            if (input.name == "room_cell") this.roomCellDraft = input.text;
+            else if (input.name == "room_pad") this.roomPadDraft = input.text;
+            this.updateKeyboardPreview(input);
+        }
+
+        private function moveToRoomDraft():void
+        {
+            var cell:String = this.roomCellDraft == null ? ""
+                : this.roomCellDraft.replace(/^\s+|\s+$/g, "");
+            var pad:String = this.roomPadDraft == null ? ""
+                : this.roomPadDraft.replace(/^\s+|\s+$/g, "");
+            if (!this.gameConnected || cell.length == 0 || pad.length == 0)
+            {
+                this.roomMessage = "ENTER BOTH A CELL AND PAD";
+                this.renderRoomOverlay();
+                return;
+            }
+            try
+            {
+                HostBridge.invoke("Jump", cell, pad);
+                this.roomMessage = "MOVING TO " + this.ellipsize(cell, 18).toUpperCase();
+                this.renderRoomOverlay();
+                setTimeout(this.refreshRoomOverlayAfterMove, 650);
+            }
+            catch (error:Error)
+            {
+                this.roomMessage = "THE ROOM MOVE COULD NOT BE SENT";
+                this.renderRoomOverlay();
+            }
+        }
+
+        private function refreshRoomOverlayAfterMove():void
+        {
+            if (!this.roomOverlayVisible || !this.gameConnected)
+            {
+                return;
+            }
+            this.roomMessage = "";
+            this.refreshRoomState(false);
+            this.renderRoomOverlay();
+        }
+
+        private function decodeJsonString(value:*, fallback:String):String
+        {
+            if (value == null)
+            {
+                return fallback;
+            }
+            try
+            {
+                var parsed:* = JSON.parse(String(value));
+                return parsed == null || String(parsed).length == 0 ? fallback : String(parsed);
+            }
+            catch (error:Error)
+            {
+                return String(value).length == 0 ? fallback : String(value);
+            }
+        }
+
+        private function decodeJsonArray(value:*):Array
+        {
+            if (value is Array)
+            {
+                return value as Array;
+            }
+            if (value == null)
+            {
+                return [];
+            }
+            try
+            {
+                var parsed:* = JSON.parse(String(value));
+                return parsed is Array ? parsed as Array : [];
+            }
+            catch (error:Error)
+            {
+                return [];
+            }
+        }
+
+        private function uniqueRoomValues(values:Array):Array
+        {
+            var result:Array = [];
+            var seen:Object = {};
+            if (values == null)
+            {
+                return result;
+            }
+            for each (var raw:* in values)
+            {
+                var value:String = raw == null ? "" : String(raw).replace(/^\s+|\s+$/g, "");
+                var key:String = value.toLowerCase();
+                if (value.length > 0 && seen[key] !== true)
+                {
+                    seen[key] = true;
+                    result.push(value);
+                }
+            }
+            return result;
+        }
+
         private function onCielSkillLoaded(event:Event):void
         {
             this.detachCielSkillLoaderListeners();
@@ -1882,7 +2761,8 @@ package grimoire
 
         private function onCielHint(event:MouseEvent):void
         {
-            if (this.cielTooltip == null || !this.gameConnected || this.chromeVisible)
+            if (this.cielTooltip == null || !this.gameConnected || this.chromeVisible
+                || this.cielMenuExpanded || this.roomOverlayVisible)
             {
                 return;
             }
@@ -1902,6 +2782,7 @@ package grimoire
             }
             this.cielDragging = true;
             this.cielDragMoved = false;
+            this.cielMenuExpanded = false;
             var localPointer:Point = globalToLocal(new Point(event.stageX, event.stageY));
             this.cielDragOffsetX = localPointer.x - this.toggleButton.x;
             this.cielDragOffsetY = localPointer.y - this.toggleButton.y;
@@ -1932,7 +2813,7 @@ package grimoire
             this.toggleButton.y = nextY;
             this.targetToggleX = nextX;
             this.targetToggleY = nextY;
-            this.positionCielTooltip();
+            this.positionCielSurfaces();
             event.updateAfterEvent();
         }
 
@@ -1983,11 +2864,45 @@ package grimoire
             this.cielTooltip.y = Math.max(8, localCenter.y - 88);
         }
 
+        private function positionCielSurfaces():void
+        {
+            this.positionCielTooltip();
+            if (this.toggleButton == null)
+            {
+                return;
+            }
+            var anchorX:Number = this.toggleButton.x;
+            var anchorY:Number = this.toggleButton.y;
+            if (this.cielMenu != null)
+            {
+                this.cielMenu.x = anchorX > this.layoutWidth / 2
+                    ? anchorX - 214 : anchorX + 32;
+                this.cielMenu.y = Math.max(8,
+                    Math.min(this.layoutHeight - 100, anchorY - 18));
+            }
+            if (this.roomOverlay != null)
+            {
+                this.roomOverlay.x = anchorX > this.layoutWidth / 2
+                    ? anchorX - ROOM_PANEL_WIDTH - 32 : anchorX + 32;
+                this.roomOverlay.x = Math.max(8,
+                    Math.min(this.layoutWidth - ROOM_PANEL_WIDTH - 8, this.roomOverlay.x));
+                this.roomOverlay.y = Math.max(8,
+                    Math.min(this.layoutHeight - ROOM_PANEL_HEIGHT - 8,
+                        anchorY - (ROOM_PANEL_HEIGHT / 2)));
+            }
+        }
+
         private function onRemovedFromStage(event:Event):void
         {
+            removeEventListener(Event.ADDED_TO_STAGE, this.onAddedToStage);
             removeEventListener(Event.REMOVED_FROM_STAGE, this.onRemovedFromStage);
             removeEventListener(Event.ENTER_FRAME, this.animateLayout);
             removeEventListener(Event.ENTER_FRAME, this.animateSection);
+            if (this.botStateRenderTimer != 0)
+            {
+                clearTimeout(this.botStateRenderTimer);
+                this.botStateRenderTimer = 0;
+            }
             HostBridge.removeEventListener(HostBridgeEvent.MESSAGE, this.onHostBridgeMessage);
             NativeApplication.nativeApplication.removeEventListener(Event.ACTIVATE,
                 this.onApplicationActivate);
@@ -2008,6 +2923,21 @@ package grimoire
                 this.cielDragStage.removeEventListener(MouseEvent.MOUSE_UP, this.onCielDragEnd, true);
                 this.cielDragStage = null;
             }
+            if (this.keyboardStage != null)
+            {
+                this.keyboardStage.removeEventListener(FocusEvent.FOCUS_IN,
+                    this.onKeyboardFocusIn, true);
+                this.keyboardStage.removeEventListener(FocusEvent.FOCUS_OUT,
+                    this.onKeyboardFocusOut, true);
+                this.keyboardStage.removeEventListener(Event.CHANGE,
+                    this.onKeyboardStageChange, true);
+                this.keyboardStage.removeEventListener(SoftKeyboardEvent.SOFT_KEYBOARD_ACTIVATE,
+                    this.onSoftKeyboardActivate, true);
+                this.keyboardStage.removeEventListener(SoftKeyboardEvent.SOFT_KEYBOARD_DEACTIVATE,
+                    this.onSoftKeyboardDeactivate, true);
+                this.keyboardStage = null;
+            }
+            this.keyboardInput = null;
             if (this.toggleButton != null && this.toggleButton.parent != null)
             {
                 this.toggleButton.parent.removeChild(this.toggleButton);
@@ -2052,6 +2982,7 @@ package grimoire
         private function onPacketDraftChanged(event:Event):void
         {
             this.packetDraft = this.packetInput == null ? "" : this.packetInput.text;
+            this.updateKeyboardPreview(this.packetInput);
         }
 
         private function sendPacket(toClient:Boolean):void
@@ -2176,7 +3107,17 @@ package grimoire
             }
             if (this.gameConnected && !this.chromeVisible)
             {
-                this.openOverlay();
+                if (this.roomOverlayVisible)
+                {
+                    this.closeRoomOverlay();
+                    this.cielMenuExpanded = true;
+                }
+                else
+                {
+                    this.cielMenuExpanded = !this.cielMenuExpanded;
+                }
+                this.hideCielTooltip();
+                this.updateOverlayControls();
             }
         }
 
@@ -2187,11 +3128,15 @@ package grimoire
 
         private function openOverlay():void
         {
+            this.cielMenuExpanded = false;
+            this.roomOverlayVisible = false;
             this.setChromeVisible(true);
         }
 
         private function closeOverlay():void
         {
+            this.cielMenuExpanded = false;
+            this.roomOverlayVisible = false;
             this.setChromeVisible(false);
         }
 
@@ -2246,9 +3191,33 @@ package grimoire
             {
                 this.toggleButton.visible = this.gameConnected && !this.chromeVisible;
             }
+            if (this.cielMenu != null)
+            {
+                this.cielMenu.visible = this.gameConnected && !this.chromeVisible
+                    && this.cielMenuExpanded && !this.roomOverlayVisible;
+                if (this.cielMenu.visible && this.cielMenu.parent == this)
+                {
+                    setChildIndex(this.cielMenu, numChildren - 1);
+                }
+            }
+            if (this.roomOverlay != null)
+            {
+                this.roomOverlay.visible = this.gameConnected && !this.chromeVisible
+                    && this.roomOverlayVisible;
+                if (this.roomOverlay.visible && this.roomOverlay.parent == this)
+                {
+                    setChildIndex(this.roomOverlay, numChildren - 1);
+                }
+            }
             if (this.cielTooltip != null && !this.gameConnected)
             {
                 this.cielTooltip.visible = false;
+            }
+            this.positionCielSurfaces();
+            if (this.keyboardPreview != null && this.keyboardPreview.visible
+                && this.keyboardPreview.parent == this)
+            {
+                setChildIndex(this.keyboardPreview, numChildren - 1);
             }
         }
 
@@ -2259,7 +3228,7 @@ package grimoire
             this.toggleButton.x = this.targetToggleX;
             this.toggleButton.y = this.targetToggleY;
             this.updateOverlayControls();
-            this.positionCielTooltip();
+            this.positionCielSurfaces();
         }
 
         private function animateLayout(e:Event):void
@@ -2297,7 +3266,34 @@ package grimoire
 
         private function onBotStateChanged(event:Event):void
         {
-            this.syncRunnerStatus();
+            var currentState:String = this.runnerState();
+            var stateChanged:Boolean = currentState != this.lastRunnerState;
+            if (stateChanged)
+            {
+                this.lastRunnerState = currentState;
+                this.syncRunnerStatus();
+            }
+            if (stateChanged || !this.botRunner.isRunning || this.botRunner.isPaused
+                || getTimer() - this.lastBotRenderAt >= BOT_PROGRESS_RENDER_MS)
+            {
+                this.flushBotStateRender();
+                return;
+            }
+            if (this.botStateRenderTimer == 0)
+            {
+                this.botStateRenderTimer = setTimeout(this.flushBotStateRender,
+                    BOT_PROGRESS_RENDER_MS - (getTimer() - this.lastBotRenderAt));
+            }
+        }
+
+        private function flushBotStateRender():void
+        {
+            if (this.botStateRenderTimer != 0)
+            {
+                clearTimeout(this.botStateRenderTimer);
+                this.botStateRenderTimer = 0;
+            }
+            this.lastBotRenderAt = getTimer();
             if (this.selectedNavigation == "Bot" || this.selectedNavigation == "Home"
                 || this.selectedNavigation == "Runner")
             {
@@ -2458,7 +3454,7 @@ package grimoire
             try
             {
                 this.updateLoader.load(new URLRequest(
-                    "https://api.github.com/repos/UnknownSecurity/grimoire-exodus/releases?per_page=10"));
+                    "https://api.github.com/repos/UnknownSecurity/grimoire-mobile/releases?per_page=10"));
             }
             catch (error:Error)
             {
@@ -2482,7 +3478,7 @@ package grimoire
 
         private function onUpdateLoaded(event:Event):void
         {
-            var bestVersion:Array = [0, 4, 4];
+            var bestVersion:Array = this.applicationVersionParts();
             var bestUrl:String;
             try
             {
@@ -2500,7 +3496,7 @@ package grimoire
                         var url:String = asset == null || asset.browser_download_url == null
                             ? "" : String(asset.browser_download_url);
                         if (match != null && this.isNewerVersion(match, bestVersion)
-                            && url.indexOf("https://github.com/UnknownSecurity/grimoire-exodus/releases/download/") == 0)
+                            && url.indexOf("https://github.com/UnknownSecurity/grimoire-mobile/releases/download/") == 0)
                         {
                             bestVersion = [int(match[1]), int(match[2]), int(match[3])];
                             bestUrl = url;
@@ -2555,6 +3551,24 @@ package grimoire
                 }
             }
             return false;
+        }
+
+        private function applicationVersionParts():Array
+        {
+            try
+            {
+                var descriptor:String = String(
+                    NativeApplication.nativeApplication.applicationDescriptor);
+                var match:Array = /<versionNumber>(\d+)\.(\d+)\.(\d+)<\/versionNumber>/.exec(descriptor);
+                if (match != null)
+                {
+                    return [int(match[1]), int(match[2]), int(match[3])];
+                }
+            }
+            catch (error:Error)
+            {
+            }
+            return [0, 0, 0];
         }
 
         private function ellipsize(value:String, maximum:int):String

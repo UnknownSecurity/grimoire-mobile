@@ -30,13 +30,14 @@ package grimoire
     {
         public static const STATE_CHANGED:String = "mobileBotStateChanged";
         private static const MAX_NESTED_BOTS:int = 16;
-        private static const MAX_COMMANDS:int = 5000;
+        private static const MAX_COMMANDS:int = 20000;
 
         private var timer:Timer = new Timer(1, 1);
         private var packetTimer:Timer = new Timer(1000);
         private var provokeTimer:Timer = new Timer(1000);
         private var commands:Array = [];
         private var index:int;
+        private var activeCommandIndex:int = -1;
         private var running:Boolean;
         private var paused:Boolean;
         private var waitingForKill:Boolean;
@@ -65,6 +66,8 @@ package grimoire
         private var provokeCellEnabled:Boolean;
         private var provokeMapEnabled:Boolean;
         private var provokePacket:String = "";
+        private var enemyMagnetEnabled:Boolean;
+        private var untargetEnabled:Boolean;
         private var beepSound:Sound;
         private var beepChannel:SoundChannel;
         private var beepSamplesRemaining:int;
@@ -100,11 +103,21 @@ package grimoire
 
         public function get commandPosition():int
         {
-            if (this.commandCount == 0)
+            if (this.commandCount == 0 || this.activeCommandIndex < 0)
             {
                 return 0;
             }
-            return Math.max(1, Math.min(this.commandCount, this.index));
+            return Math.max(1, Math.min(this.commandCount, this.activeCommandIndex + 1));
+        }
+
+        public function get currentCommandIndex():int
+        {
+            return this.activeCommandIndex;
+        }
+
+        public function get commandSnapshot():Array
+        {
+            return this.commands == null ? [] : this.commands.concat();
         }
 
         public function start(document:Object):void
@@ -139,6 +152,7 @@ package grimoire
             this.packetTimer.stop();
             this.provokeTimer.stop();
             this.setStatus("BOT RUNNING");
+            this.updateProvokeTimer();
             this.schedule(1);
         }
 
@@ -212,6 +226,10 @@ package grimoire
                 this.continueKill();
                 return;
             }
+            if (this.maintainPlayerState())
+            {
+                return;
+            }
             this.collectWhitelistedDrops();
             if (this.maintainQuestList())
             {
@@ -223,8 +241,10 @@ package grimoire
                 return;
             }
 
+            this.activeCommandIndex = this.index;
             var command:Object = this.commands[this.index++];
             var kind:String = this.commandName(command);
+            this.notifyStateChanged();
             var delay:int = this.botDelay;
             try
             {
@@ -298,7 +318,19 @@ package grimoire
                         return;
                     case "CmdUseSkill":
                     case "CmdUseSkill2":
-                        Skill.skillAction(this.resolveText(command.Index, "1"));
+                        var skillIndex:String = this.resolveText(command.Index, "1");
+                        var waitForAll:Boolean = this.configuration != null
+                            && this.configuration.WaitForAllSkills === true;
+                        var waitForCurrent:Boolean = command.Wait === true
+                            || (this.configuration != null && this.configuration.WaitForSkill === true);
+                        if ((waitForAll && Skill.allSkillsAvailable() < 1)
+                            || (waitForCurrent && Skill.isSkillReady(skillIndex) < 1))
+                        {
+                            this.index = Math.max(0, this.index - 1);
+                            this.schedule(100);
+                            return;
+                        }
+                        Skill.skillAction(skillIndex);
                         delay = 250;
                         break;
                     case "CmdSkillSet":
@@ -648,6 +680,7 @@ package grimoire
         private function restartCommandLoop():void
         {
             this.index = 0;
+            this.activeCommandIndex = -1;
             this.setStatus("BOT RUNNING");
             this.schedule(Math.max(1, this.botDelay));
         }
@@ -674,8 +707,13 @@ package grimoire
             this.labels = {};
             this.skillDelay = document.SkillDelay == null ? 250
                 : this.numberValue(document.SkillDelay, 10, 10000);
+            this.provokeCellEnabled = document.ProvokeMonsters === true;
+            this.provokeMapEnabled = document.ProvokeAllMonster === true;
+            this.enemyMagnetEnabled = document.EnemyMagnet === true;
+            this.untargetEnabled = document.Untarget === true;
             this.buildSkillSets(document.Skills);
             this.loadConfigurationLists(document);
+            this.applyConfigurationOptions(document);
             this.activeSkillSet = null;
             this.skillCursor = 0;
             for (var labelIndex:int = 0; labelIndex < this.commands.length; labelIndex++)
@@ -687,10 +725,15 @@ package grimoire
                 }
             }
             this.index = Math.max(0, Math.min(this.commands.length, startIndex));
+            this.activeCommandIndex = -1;
             this.waitingForKill = false;
             this.killEngaged = false;
             this.killTarget = null;
             this.killForItem = null;
+            if (this.running)
+            {
+                this.updateProvokeTimer();
+            }
             return true;
         }
 
@@ -711,7 +754,8 @@ package grimoire
         private function updateProvokeTimer():void
         {
             if (this.running && !this.paused
-                && (this.provokeCellEnabled || this.provokeMapEnabled))
+                && (this.provokeCellEnabled || this.provokeMapEnabled
+                    || this.enemyMagnetEnabled || this.untargetEnabled))
             {
                 if (!this.provokeTimer.running)
                 {
@@ -747,6 +791,14 @@ package grimoire
                     {
                         Root.provokeAllMonsters();
                     }
+                }
+                if (this.enemyMagnetEnabled)
+                {
+                    Setting.setEnemyMagnet();
+                }
+                if (this.untargetEnabled)
+                {
+                    Player.cancelTargetSelf();
                 }
             }
             catch (error:Error)
@@ -993,6 +1045,91 @@ package grimoire
                 {
                     DropStack.getDrop(name);
                 }
+            }
+        }
+
+        private function maintainPlayerState():Boolean
+        {
+            if (this.configuration == null)
+            {
+                return false;
+            }
+            try
+            {
+                var maximumHealth:int = Player.maxHealth();
+                var currentHealth:int = Player.health();
+                if (maximumHealth > 0 && currentHealth <= 0)
+                {
+                    if (this.configuration.RestartUponDeath === true)
+                    {
+                        this.index = 0;
+                        this.activeCommandIndex = -1;
+                    }
+                    this.schedule(1000);
+                    return true;
+                }
+
+                var shouldRest:Boolean = this.configuration.RestIfHp === true
+                    && this.percentage(currentHealth, maximumHealth)
+                        <= this.numberValue(this.configuration.RestHp, 0, 100);
+                if (!shouldRest && this.configuration.RestIfMp === true)
+                {
+                    shouldRest = this.percentage(Player.mana(), Player.maxMana())
+                        <= this.numberValue(this.configuration.RestMp, 0, 100);
+                }
+                if (shouldRest)
+                {
+                    if (this.configuration.ExitCombatBeforeRest === true)
+                    {
+                        Player.cancelTarget();
+                        Player.cancelAutoAttack();
+                    }
+                    Player.rest();
+                    this.schedule(500);
+                    return true;
+                }
+            }
+            catch (error:Error)
+            {
+                // AQW briefly invalidates avatar values during room changes.
+                // Preserve the current command and retry on the normal tick.
+            }
+            return false;
+        }
+
+        private function applyConfigurationOptions(document:Object):void
+        {
+            if (document == null)
+            {
+                return;
+            }
+            try
+            {
+                if (document.InfiniteAttackRange === true)
+                {
+                    Setting.toggleInfiniteRange(true);
+                }
+                if (document.LagKiller === true)
+                {
+                    Setting.toggleLagKiller(false);
+                }
+                if (document.HidePlayers === true)
+                {
+                    Setting.hidePlayers(true);
+                }
+                if (document.DisableAnimations === true)
+                {
+                    Setting.disableAnimations(true);
+                }
+                if (document.WalkSpeed != null && int(document.WalkSpeed) > 0)
+                {
+                    Setting.setWalkSpeed(this.numberValue(document.WalkSpeed, 1, 50));
+                }
+            }
+            catch (error:Error)
+            {
+                // Options are applied again by the bounded maintenance timer
+                // after AQW finishes a room transition.
             }
         }
 
@@ -1739,6 +1876,11 @@ package grimoire
         private function setStatus(value:String):void
         {
             this.statusText = value;
+            this.notifyStateChanged();
+        }
+
+        private function notifyStateChanged():void
+        {
             this.dispatchEvent(new Event(STATE_CHANGED));
         }
 

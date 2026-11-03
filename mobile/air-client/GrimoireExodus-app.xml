@@ -3,8 +3,8 @@
     <id>com.unknownsecurity.grimoireexodus.mobile</id>
     <filename>GrimoireExodus</filename>
     <name>Grimoire Exodus</name>
-    <versionNumber>1.0.0</versionNumber>
-    <versionLabel>1.0.0</versionLabel>
+    <versionNumber>1.1.0</versionNumber>
+    <versionLabel>1.1.0</versionLabel>
     <description>Standalone HARMAN AIR Grimoire Exodus AQW client for Android.</description>
 
     <initialWindow>

@@ -17,5 +17,12 @@
                 <finalizer>com.unknownsecurity.grimoireexodus.runner.RunnerExtension</finalizer>
             </applicationDeployment>
         </platform>
+        <platform name="Android-x86">
+            <applicationDeployment>
+                <nativeLibrary>GrimoireRunnerService.jar</nativeLibrary>
+                <initializer>com.unknownsecurity.grimoireexodus.runner.RunnerExtension</initializer>
+                <finalizer>com.unknownsecurity.grimoireexodus.runner.RunnerExtension</finalizer>
+            </applicationDeployment>
+        </platform>
     </platforms>
 </extension>

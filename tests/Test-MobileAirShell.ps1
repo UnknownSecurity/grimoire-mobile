@@ -12,6 +12,7 @@ $preferencesPath = Join-Path $repositoryRoot 'game-client\AS3\grimoire\MobilePre
 $runnerBridgePath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\actionscript\grimoire\nativebridge\AndroidRunnerBridge.as'
 $runnerContextPath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\native\src\com\unknownsecurity\grimoireexodus\runner\RunnerContext.java'
 $runnerServicePath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\native\src\com\unknownsecurity\grimoireexodus\runner\RunnerForegroundService.java'
+$runnerBuildPath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\build-runner-service-ane.ps1'
 $runnerExtensionPath = Join-Path $repositoryRoot 'mobile\air-client\runner-service-ane\extension.xml'
 $pickerBridgePath = Join-Path $repositoryRoot 'mobile\air-client\document-picker-ane\actionscript\grimoire\nativebridge\AndroidDocumentPicker.as'
 $pickerActivityPath = Join-Path $repositoryRoot 'mobile\air-client\document-picker-ane\native\src\com\unknownsecurity\grimoireexodus\documentpicker\DocumentPickerActivity.java'
@@ -78,6 +79,7 @@ $preferencesSource = Get-Content -Raw $preferencesPath
 $runnerBridgeSource = if (Test-Path -LiteralPath $runnerBridgePath) { Get-Content -Raw $runnerBridgePath } else { '' }
 $runnerContextSource = if (Test-Path -LiteralPath $runnerContextPath) { Get-Content -Raw $runnerContextPath } else { '' }
 $runnerServiceSource = if (Test-Path -LiteralPath $runnerServicePath) { Get-Content -Raw $runnerServicePath } else { '' }
+$runnerBuildSource = if (Test-Path -LiteralPath $runnerBuildPath) { Get-Content -Raw $runnerBuildPath } else { '' }
 $runnerExtensionSource = if (Test-Path -LiteralPath $runnerExtensionPath) { Get-Content -Raw $runnerExtensionPath } else { '' }
 $pickerBridgeSource = Get-Content -Raw $pickerBridgePath
 $pickerActivitySource = Get-Content -Raw $pickerActivityPath
@@ -282,6 +284,28 @@ Assert-Contract (($botEditorSource -match 'function\s+addTemplate') -and
     ($botEditorSource -match 'function\s+setSelectedProperty') -and
     ($botEditorSource -match 'MAX_COMMANDS')) `
     'The mobile editor must support bounded add, reorder, duplicate, delete, and property editing operations.'
+$desktopConfigurationFields = @(
+    'BotDelay', 'SkillDelay', 'DropDelay', 'WaitForAllSkills', 'WaitForSkill',
+    'SkipDelayIndexIf', 'ExitCombatBeforeRest', 'ExitCombatBeforeQuest',
+    'ExitCombatBeforeStop', 'RestIfHp', 'RestHp', 'RestIfMp', 'RestMp',
+    'RestartUponDeath', 'EnablePickup', 'EnablePickupAll', 'EnablePickupAcTagged',
+    'EnableRejection', 'EnableRejectAll', 'NotifyItemOnPickup', 'AutoRelogin',
+    'RelogDelay', 'RelogRetryUponFailure', 'RelogUponQuestFailure',
+    'RelogUponItemBuyFailure', 'AFK', 'InfiniteAttackRange', 'ProvokeMonsters',
+    'ProvokeAllMonster', 'EnemyMagnet', 'Untarget', 'LagKiller', 'HidePlayers',
+    'SkipCutscenes', 'DisableAnimations', 'AutoSaveState', 'WalkSpeed',
+    'UnbankOnStart', 'BankOnStop'
+)
+foreach ($configurationField in $desktopConfigurationFields) {
+    Assert-Contract ($botEditorSource -match ('configurationField\("' +
+            [regex]::Escape($configurationField) + '"')) `
+        "The mobile Bot Manager configuration editor is missing $configurationField."
+}
+Assert-Contract (($botEditorSource -match 'function\s+setConfigurationValue') -and
+    ($botEditorSource -match 'function\s+toggleConfigurationValue') -and
+    ($shellSource -match 'renderBotConfigurationInspector') -and
+    ($shellSource -match 'bot_config_toggle_')) `
+    'The AIR Bot Manager must expose editable desktop configuration fields without changing legacy type identity.'
 foreach ($requiredTemplate in @('CmdKill', 'CmdKillFor', 'CmdJoin', 'CmdJoin2', 'CmdMoveToCell',
         'CmdUseSkill', 'CmdAcceptQuest2', 'CmdCompleteQuest2', 'CmdDelay', 'CmdGetDrop')) {
     Assert-Contract ($botEditorSource -match [regex]::Escape($requiredTemplate)) `
@@ -306,6 +330,10 @@ Assert-Contract (($shellSource -match 'new\s+MobileBotEditor\(\)') -and
     ($shellSource -match 'bot_command_duplicate') -and
     ($shellSource -match 'bot_property_')) `
     'The AIR overlay must expose the complete mobile Bot Manager editing workflow.'
+Assert-Contract (($shellSource -match 'id\s*==\s*"bot_new"[\s\S]{0,180}botRunner\.isRunning[\s\S]{0,180}STOP THE RUNNING BOT BEFORE EDITING') -and
+    ($shellSource -match 'id\s*==\s*"bot_edit"[\s\S]{0,180}botRunner\.isRunning[\s\S]{0,180}STOP THE RUNNING BOT BEFORE EDITING') -and
+    ($shellSource -match 'id\s*==\s*"bot_delete"[\s\S]{0,180}botRunner\.isRunning[\s\S]{0,180}STOP THE RUNNING BOT BEFORE DELETING IT')) `
+    'New, edit, and delete operations must remain blocked while a bot is running.'
 Assert-Contract (($botLibrarySource -match 'selectPath\(destination\.url') -and
     ($botLibrarySource -match 'private function selectPath\(path:String')) `
     'A successfully imported bot must become the selected bot so Start works immediately.'
@@ -387,6 +415,23 @@ Assert-Contract (($botRunnerSource -match 'private\s+function\s+restartCommandLo
     ($botRunnerSource -match 'if\s*\(this\.index\s*>=\s*this\.commands\.length\)\s*\{\s*this\.restartCommandLoop\(\);\s*return;\s*\}') -and
     ($botRunnerSource -notmatch 'this\.stop\("BOT COMPLETED"\)')) `
     'A running legacy farming bot must restart at the first command instead of stopping at the end of the list.'
+Assert-Contract (($botRunnerSource -match 'activeCommandIndex:int\s*=\s*-1') -and
+    ($botRunnerSource -match 'public\s+function\s+get\s+currentCommandIndex') -and
+    ($botRunnerSource -match 'public\s+function\s+get\s+commandSnapshot') -and
+    ($botRunnerSource -match 'this\.activeCommandIndex\s*=\s*this\.index') -and
+    ($botRunnerSource -match 'this\.notifyStateChanged\(\)')) `
+    'The runner must publish the exact command being executed instead of the next command index.'
+Assert-Contract (($shellSource -match 'renderBotInspector') -and
+    ($shellSource -match 'createBotActionRow') -and
+    ($shellSource -match 'bot_action_select_') -and
+    ($shellSource -match 'BOT_PROGRESS_RENDER_MS:int\s*=\s*120') -and
+    ($shellSource -match 'flushBotStateRender')) `
+    'The full Bot overlay must show, highlight, auto-page, and efficiently refresh the active action list.'
+Assert-Contract (($botRunnerSource -match 'maintainPlayerState') -and
+    ($botRunnerSource -match 'configuration\.WaitForAllSkills') -and
+    ($botRunnerSource -match 'configuration\.WaitForSkill') -and
+    ($botRunnerSource -match 'applyConfigurationOptions')) `
+    'Mobile execution must honor foundational desktop rest, skill-wait, death, and client-option behavior.'
 
 $communityBotDirectory = Join-Path $repositoryRoot 'app\Bot'
 if (Test-Path -LiteralPath $communityBotDirectory -PathType Container) {
@@ -426,6 +471,32 @@ Assert-Contract ($shellSource -match 'getTimer\(\)') `
     'Chrome animation must use elapsed time rather than frame-dependent easing.'
 Assert-Contract ($shellSource -notmatch '\+=\s*\([^\r\n]+\)\s*\*\s*0\.19') `
     'The old asymptotic 0.19-per-frame animation must not return.'
+Assert-Contract (($shellSource -match 'SoftKeyboardEvent\.SOFT_KEYBOARD_ACTIVATE') -and
+    ($shellSource -match 'stage\.softKeyboardRect') -and
+    ($shellSource -match 'keyboardStage\.addEventListener\(FocusEvent\.FOCUS_IN') -and
+    ($shellSource -match 'keyboardStage\.addEventListener\(Event\.CHANGE') -and
+    ($shellSource -match 'registerKeyboardInput\(input, label\)') -and
+    ($shellSource -match 'registerKeyboardInput\(this\.packetInput, "PACKET"\)') -and
+    ($shellSource -match 'registerKeyboardInput\(input, name == "room_cell"') -and
+    ($shellSource -match 'this\.keyboardPreviewValue\.text') -and
+    ($shellSource -match 'displayAsPassword') -and
+    ($shellSource -match 'maskedKeyboardValue')) `
+    'Editable Bot, Packet, and Room fields must share the above-keyboard typing preview.'
+Assert-Contract (($shellSource -match 'ciel_open_overlay') -and
+    ($shellSource -match 'ciel_open_room') -and
+    ($shellSource -match 'roomOverlayVisible') -and
+    ($shellSource -match 'HostBridge\.invoke\("Cell"\)') -and
+    ($shellSource -match 'HostBridge\.invoke\("Pad"\)') -and
+    ($shellSource -match 'HostBridge\.invoke\("Position"\)') -and
+    ($shellSource -match 'HostBridge\.invoke\("GetCells"\)') -and
+    ($shellSource -match 'HostBridge\.invoke\("GetPads"\)') -and
+    ($shellSource -match 'HostBridge\.invoke\("Jump", cell, pad\)')) `
+    'A Ciel tap must expose bounded Ciel/Room choices and the Room overlay must use registered game callbacks.'
+Assert-Contract (($shellSource -match 'api\.github\.com/repos/UnknownSecurity/grimoire-mobile/releases') -and
+    ($shellSource -match 'github\.com/UnknownSecurity/grimoire-mobile/releases/download/') -and
+    ($shellSource -match 'applicationVersionParts\(\)') -and
+    ($shellSource -notmatch 'api\.github\.com/repos/UnknownSecurity/grimoire-exodus/releases')) `
+    'Mobile update checks must use the independent official mobile release feed and installed app version.'
 $topNavigation = [regex]::Match(
     $shellSource,
     'private function buildTopNavigation\(\):void[\s\S]*?\n\s*\}',
@@ -527,5 +598,20 @@ Assert-Contract ($descriptorSource -match '<aspectRatio>landscape</aspectRatio>'
     'The Android client must remain landscape-only.'
 Assert-Contract ($descriptorSource -match '<fullScreen>true</fullScreen>') `
     'The Android client must remain immersive full screen.'
+
+Assert-Contract (($buildScriptSource -match '\[ValidateSet\("armv8", "x86"\)\]') -and
+    ($buildScriptSource -match '\[string\]\$Architecture\s*=\s*"armv8"') -and
+    ($buildScriptSource -match '\$Architecture\s*-eq\s*"x86"') -and
+    ($buildScriptSource -match '\$target\s*=\s*if\s*\(\$Architecture\s*-eq\s*"x86"\)\s*\{\s*"apk-emulator"') -and
+    ($buildScriptSource -match 'if\s*\(\$Architecture\s*-ne\s*"armv8"\)\s*\{\s*throw\s*"Emulator architecture builds are Debug-only\."') -and
+    ($buildScriptSource -match 'x86-emulator') -and
+    ($mobileBuildScriptSource -match '\[string\]\s*\$Architecture\s*=\s*''armv8''') -and
+    ($mobileBuildScriptSource -match '-Architecture\s+\$Architecture')) `
+    'Production builds must default to arm64 while x86 remains an explicit Debug-only emulator target.'
+Assert-Contract (($runnerExtensionSource -match '<platform name="Android-x86">') -and
+    ($pickerExtensionSource -match '<platform name="Android-x86">') -and
+    ($runnerBuildSource -match '-platform Android-x86') -and
+    ($pickerBuildSource -match '-platform Android-x86')) `
+    'The Android native extensions must package x86 support for emulator validation.'
 
 Write-Host 'Mobile AIR shell contract passed.'

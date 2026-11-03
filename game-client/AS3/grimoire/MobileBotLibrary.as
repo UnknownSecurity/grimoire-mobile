@@ -19,7 +19,10 @@ package grimoire
     {
         public static const CHANGED:String = "mobileBotLibraryChanged";
         public static const MAX_BOT_BYTES:uint = 2 * 1024 * 1024;
-        public static const MAX_COMMANDS:int = 5000;
+        // Large desktop-authored farming bots can legitimately exceed the old
+        // 5,000-action ceiling. The independent 2 MiB JSON limit and bounded
+        // parser depth remain the primary memory guard.
+        public static const MAX_COMMANDS:int = 20000;
 
         private var items:Array = [];
         private var picker:AndroidDocumentPicker;

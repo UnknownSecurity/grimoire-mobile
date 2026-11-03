@@ -18,12 +18,14 @@ package grimoire
 
         private var workingDocument:Object;
         private var commandTemplates:Array;
+        private var configurationDefinitions:Array;
         private var currentIndex:int = -1;
         private var changed:Boolean;
 
         public function MobileBotEditor()
         {
             this.commandTemplates = this.createTemplates();
+            this.configurationDefinitions = this.createConfigurationDefinitions();
         }
 
         public function get document():Object
@@ -59,6 +61,11 @@ package grimoire
             return this.commandTemplates.concat();
         }
 
+        public function get configurationFields():Array
+        {
+            return this.configurationDefinitions.concat();
+        }
+
         public function createNew():void
         {
             this.workingDocument = {
@@ -71,6 +78,7 @@ package grimoire
                 "Description": "Created with Grimoire Exodus Mobile",
                 "BotDelay": 500
             };
+            this.applyNewConfigurationDefaults();
             this.attachRuntimeCommands();
             this.currentIndex = -1;
             this.changed = true;
@@ -249,6 +257,64 @@ package grimoire
             return true;
         }
 
+        public function configurationValue(index:int):*
+        {
+            var definition:Object = this.configurationDefinition(index);
+            if (definition == null || this.workingDocument == null)
+            {
+                return null;
+            }
+            return this.workingDocument.hasOwnProperty(definition.key)
+                ? this.workingDocument[definition.key] : definition.defaultValue;
+        }
+
+        public function setConfigurationValue(index:int, text:String):Boolean
+        {
+            var definition:Object = this.configurationDefinition(index);
+            if (definition == null || this.workingDocument == null)
+            {
+                return false;
+            }
+            if (definition.type == "bool")
+            {
+                var normalized:String = text == null ? "" : text.toLowerCase();
+                if (normalized != "true" && normalized != "false"
+                    && normalized != "1" && normalized != "0")
+                {
+                    return false;
+                }
+                this.workingDocument[definition.key] = normalized == "true" || normalized == "1";
+            }
+            else if (definition.type == "int")
+            {
+                var numeric:Number = Number(text);
+                if (isNaN(numeric))
+                {
+                    return false;
+                }
+                this.workingDocument[definition.key] = Math.max(Number(definition.minimum),
+                    Math.min(Number(definition.maximum), int(numeric)));
+            }
+            else
+            {
+                this.workingDocument[definition.key] = text == null ? "" : text;
+            }
+            this.changed = true;
+            return true;
+        }
+
+        public function toggleConfigurationValue(index:int):Boolean
+        {
+            var definition:Object = this.configurationDefinition(index);
+            if (definition == null || definition.type != "bool" || this.workingDocument == null)
+            {
+                return false;
+            }
+            this.workingDocument[definition.key] = !(this.configurationValue(index) === true);
+            this.changed = true;
+            return true;
+        }
+
         public function commandName(command:Object = null):String
         {
             if (command == null)
@@ -323,6 +389,75 @@ package grimoire
             {
                 this.workingDocument.Commands["$values"] = [];
             }
+        }
+
+        private function configurationDefinition(index:int):Object
+        {
+            return index >= 0 && index < this.configurationDefinitions.length
+                ? this.configurationDefinitions[index] : null;
+        }
+
+        private function applyNewConfigurationDefaults():void
+        {
+            for each (var definition:Object in this.configurationDefinitions)
+            {
+                if (!this.workingDocument.hasOwnProperty(definition.key))
+                {
+                    this.workingDocument[definition.key] = definition.defaultValue;
+                }
+            }
+        }
+
+        private function createConfigurationDefinitions():Array
+        {
+            return [
+                this.configurationField("BotDelay", "BOT DELAY", "int", 500, 10, 60000, "Runtime"),
+                this.configurationField("SkillDelay", "SKILL DELAY", "int", 250, 10, 10000, "Runtime"),
+                this.configurationField("DropDelay", "DROP DELAY", "int", 0, 0, 60000, "Runtime"),
+                this.configurationField("WaitForAllSkills", "WAIT FOR ALL SKILLS", "bool", false, 0, 1, "Runtime"),
+                this.configurationField("WaitForSkill", "WAIT FOR CURRENT SKILL", "bool", false, 0, 1, "Runtime"),
+                this.configurationField("SkipDelayIndexIf", "SKIP CONDITION DELAY", "bool", false, 0, 1, "Runtime"),
+                this.configurationField("ExitCombatBeforeRest", "EXIT COMBAT BEFORE REST", "bool", false, 0, 1, "Combat"),
+                this.configurationField("ExitCombatBeforeQuest", "EXIT COMBAT BEFORE QUEST", "bool", false, 0, 1, "Combat"),
+                this.configurationField("ExitCombatBeforeStop", "EXIT COMBAT BEFORE STOP", "bool", true, 0, 1, "Combat"),
+                this.configurationField("RestIfHp", "REST AT LOW HP", "bool", false, 0, 1, "Combat"),
+                this.configurationField("RestHp", "REST HP %", "int", 25, 0, 100, "Combat"),
+                this.configurationField("RestIfMp", "REST AT LOW MP", "bool", false, 0, 1, "Combat"),
+                this.configurationField("RestMp", "REST MP %", "int", 25, 0, 100, "Combat"),
+                this.configurationField("RestartUponDeath", "RESTART ON DEATH", "bool", false, 0, 1, "Combat"),
+                this.configurationField("EnablePickup", "PICK UP DROP LIST", "bool", false, 0, 1, "Drops"),
+                this.configurationField("EnablePickupAll", "PICK UP ALL", "bool", false, 0, 1, "Drops"),
+                this.configurationField("EnablePickupAcTagged", "PICK UP AC-TAGGED", "bool", false, 0, 1, "Drops"),
+                this.configurationField("EnableRejection", "REJECT UNLISTED DROPS", "bool", false, 0, 1, "Drops"),
+                this.configurationField("EnableRejectAll", "REJECT ALL DROPS", "bool", false, 0, 1, "Drops"),
+                this.configurationField("NotifyItemOnPickup", "NOTIFY ITEM PROGRESS", "bool", false, 0, 1, "Drops"),
+                this.configurationField("AutoRelogin", "AUTO RELOGIN", "bool", false, 0, 1, "Relog"),
+                this.configurationField("RelogDelay", "RELOGIN DELAY", "int", 0, 0, 600000, "Relog"),
+                this.configurationField("RelogRetryUponFailure", "RETRY FAILED RELOGIN", "bool", false, 0, 1, "Relog"),
+                this.configurationField("RelogUponQuestFailure", "RELOGIN ON QUEST FAILURE", "bool", false, 0, 1, "Relog"),
+                this.configurationField("RelogUponItemBuyFailure", "RELOGIN ON BUY FAILURE", "bool", false, 0, 1, "Relog"),
+                this.configurationField("AFK", "RELOGIN ON AFK", "bool", false, 0, 1, "Relog"),
+                this.configurationField("InfiniteAttackRange", "INFINITE ATTACK RANGE", "bool", false, 0, 1, "Client"),
+                this.configurationField("ProvokeMonsters", "PROVOKE CELL", "bool", false, 0, 1, "Client"),
+                this.configurationField("ProvokeAllMonster", "PROVOKE MAP", "bool", false, 0, 1, "Client"),
+                this.configurationField("EnemyMagnet", "ENEMY MAGNET", "bool", false, 0, 1, "Client"),
+                this.configurationField("Untarget", "UNTARGET SELF", "bool", false, 0, 1, "Client"),
+                this.configurationField("LagKiller", "LAG KILLER", "bool", false, 0, 1, "Client"),
+                this.configurationField("HidePlayers", "HIDE PLAYERS", "bool", false, 0, 1, "Client"),
+                this.configurationField("SkipCutscenes", "SKIP CUTSCENES", "bool", false, 0, 1, "Client"),
+                this.configurationField("DisableAnimations", "DISABLE ANIMATIONS", "bool", false, 0, 1, "Client"),
+                this.configurationField("AutoSaveState", "AUTO SAVE STATE", "bool", false, 0, 1, "Client"),
+                this.configurationField("WalkSpeed", "WALK SPEED", "int", 8, 1, 50, "Client"),
+                this.configurationField("UnbankOnStart", "UNBANK ITEMS ON START", "bool", false, 0, 1, "Bank"),
+                this.configurationField("BankOnStop", "BANK ITEMS ON STOP", "bool", false, 0, 1, "Bank")
+            ];
+        }
+
+        private function configurationField(key:String, label:String, type:String,
+            defaultValue:*, minimum:Number, maximum:Number, category:String):Object
+        {
+            return { key: key, label: label, type: type, defaultValue: defaultValue,
+                minimum: minimum, maximum: maximum, category: category };
         }
 
         private function createTemplates():Array

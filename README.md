@@ -5,7 +5,7 @@ owns its AQW client, uses the original HARMAN AIR AVM2 runtime by default, and
 draws the Grimoire command overlay above the live game. It does not launch,
 patch, automate, or repackage another installed Android application.
 
-The current independent mobile version is **0.5.0**. Mobile and desktop now
+The current independent mobile preview is **1.1.0**. Mobile and desktop now
 have separate version histories, build pipelines, signing keys, and releases.
 Use `.\Set-MobileVersion.ps1 -Version <major.minor.patch>` to update the mobile
 AIR descriptor and experimental Android version together.
@@ -15,8 +15,11 @@ AIR descriptor and experimental Android version together.
 - Landscape-only, immersive AQW client loaded from the official live endpoint
 - HARMAN AIR default engine with the native 960×550 AQW coordinate plane
 - Dark violet, full-stage glass overlay with left controls and a live right rail
-- Operational Bot Manager with bounded `.gbot` import and fail-closed execution
-- Draggable Ciel control for opening the overlay without blocking game controls
+- Desktop-style Bot Manager with bounded `.gbot` import, editing, active-action
+  tracking, looping, and fail-closed execution
+- Draggable Ciel launcher with separate command-center and Room overlays
+- Room cell/pad inspection and movement through the checked-in game bridge
+- Above-keyboard typing preview for game and Grimoire input fields
 - Bank, Options, Packet, Tools, profile status, and mobile settings surfaces
 - Separately identified Compose/Ruffle experimental research build
 

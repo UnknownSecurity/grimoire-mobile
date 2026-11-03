@@ -17,5 +17,12 @@
                 <finalizer>com.unknownsecurity.grimoireexodus.documentpicker.DocumentPickerExtension</finalizer>
             </applicationDeployment>
         </platform>
+        <platform name="Android-x86">
+            <applicationDeployment>
+                <nativeLibrary>GrimoireDocumentPicker.jar</nativeLibrary>
+                <initializer>com.unknownsecurity.grimoireexodus.documentpicker.DocumentPickerExtension</initializer>
+                <finalizer>com.unknownsecurity.grimoireexodus.documentpicker.DocumentPickerExtension</finalizer>
+            </applicationDeployment>
+        </platform>
     </platforms>
 </extension>

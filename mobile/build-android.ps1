@@ -5,6 +5,9 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string] $Configuration = 'Debug',
 
+    [ValidateSet('armv8', 'x86')]
+    [string] $Architecture = 'armv8',
+
     [switch] $SkipActionScript
 )
 
@@ -19,7 +22,9 @@ $sourceApk = Join-Path $mobileRoot 'app\build\outputs\apk\debug\app-debug.apk'
 $distRoot = Join-Path $repositoryRoot 'dist'
 
 if ($Engine -eq 'Air') {
-    & (Join-Path $mobileRoot 'air-client\build-air.ps1') -Configuration $Configuration
+    & (Join-Path $mobileRoot 'air-client\build-air.ps1') `
+        -Configuration $Configuration `
+        -Architecture $Architecture
     if (-not $?) {
         throw 'The default HARMAN AIR Android APK build failed.'
     }

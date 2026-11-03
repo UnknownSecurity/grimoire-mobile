@@ -3,6 +3,9 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
 
+    [ValidateSet("armv8", "x86")]
+    [string]$Architecture = "armv8",
+
     [string]$AirSdkHome = $env:AIR_HOME,
 
     [string]$KeystorePath = $env:GRIMOIRE_ANDROID_KEYSTORE,
@@ -99,7 +102,15 @@ if ($LASTEXITCODE -ne 0) {
     throw "The AIR ActionScript compilation failed with exit code $LASTEXITCODE."
 }
 
-Copy-Item -LiteralPath $descriptorSource -Destination (Join-Path $stagingRoot "GrimoireExodus-app.xml")
+$stagedDescriptor = Join-Path $stagingRoot "GrimoireExodus-app.xml"
+Copy-Item -LiteralPath $descriptorSource -Destination $stagedDescriptor
+if ($Architecture -eq "x86") {
+    $descriptorContent = Get-Content -LiteralPath $stagedDescriptor -Raw
+    $descriptorContent = $descriptorContent.Replace(
+        "<buildArchitectures>armv8</buildArchitectures>",
+        "<buildArchitectures>x86</buildArchitectures>")
+    Set-Content -LiteralPath $stagedDescriptor -Value $descriptorContent -Encoding UTF8
+}
 Copy-Item -LiteralPath $bannerSource -Destination (Join-Path $stagingRoot "assets\grimoire_banner.png")
 Copy-Item -LiteralPath $emblemSource -Destination (Join-Path $stagingRoot "assets\grimoire_emblem.png")
 Copy-Item -LiteralPath $cielSkillSource -Destination (Join-Path $stagingRoot "assets\ciel_skill.png")
@@ -159,9 +170,12 @@ if ($Configuration -eq "Debug") {
             throw "The AIR development certificate could not be created."
         }
     }
-    $target = "apk-debug"
+    $target = if ($Architecture -eq "x86") { "apk-emulator" } else { "apk-debug" }
 }
 else {
+    if ($Architecture -ne "armv8") {
+        throw "Emulator architecture builds are Debug-only."
+    }
     if ([string]::IsNullOrWhiteSpace($KeystorePath) -or [string]::IsNullOrWhiteSpace($KeystorePassword)) {
         throw "Release builds require GRIMOIRE_ANDROID_KEYSTORE and GRIMOIRE_ANDROID_KEYSTORE_PASSWORD."
     }
@@ -171,14 +185,15 @@ else {
     $target = "apk"
 }
 
-$outputName = "Grimoire-Exodus-Android-AIR-$versionLabel-arm64.apk"
+$architectureLabel = if ($Architecture -eq "armv8") { "arm64" } else { "x86-emulator" }
+$outputName = "Grimoire-Exodus-Android-AIR-$versionLabel-$architectureLabel.apk"
 $outputPath = Join-Path $distRoot $outputName
 Push-Location $stagingRoot
 try {
     & $packager `
         -package `
         -target $target `
-        -arch armv8 `
+        -arch $Architecture `
         -storetype pkcs12 `
         -keystore $KeystorePath `
         -storepass $KeystorePassword `

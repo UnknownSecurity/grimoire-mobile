@@ -4,7 +4,7 @@ This directory contains the additive Android port. The existing Windows client,
 updater, installer, ActionScript bridge, and release paths remain in their
 current locations and do not depend on this Gradle build.
 
-## Current milestone (0.5.0)
+## Current milestone (1.1.0 preview)
 
 Mobile versions are independent from Grimoire Exodus Desktop. The root
 `VERSION` file is the source of truth for the AIR package and release artifact;
@@ -20,9 +20,13 @@ The Android work now has two additive surfaces:
 - an AIR-native Grimoire command-center wrapper with the requested top menu,
   compact overlay drawer, authenticated character status, and dark violet game
   frame;
-- a login-aware **Ciel** control in the top-right, separate from AQW's native
-  action bar, that appears only after the game session is ready and opens the
-  wrapper without becoming a combat skill or translating or scaling AQW;
+- a login-aware, draggable **Ciel** control, separate from AQW's native action
+  bar, that appears only after the game session is ready and expands into
+  command-center and Room overlay actions without translating or scaling AQW;
+- a compact Room overlay that reads current cell/pad/position, lists known map
+  values, and moves through the checked-in callback allowlist;
+- an above-keyboard preview for focused AQW and Grimoire input fields, with
+  passwords masked before rendering;
 - a clipped 960×550 AQW stage with uniform, aspect-preserving display scaling,
   so rendered targets and Android X/Y input share the same logical coordinates;
 - an immersive, landscape-only dark-purple command center that hides Android's
@@ -128,7 +132,7 @@ approved. Do not publish development builds as an official release.
 
 ## Emulator validation
 
-The 0.5.0 experimental Ruffle debug line has been exercised on an Android 16 Google APIs
+The experimental Ruffle debug line has been exercised on an Android 16 Google APIs
 x86_64 emulator. The official AQW client reaches authenticated server selection,
 and bridge diagnostics report a connected socket, the `Game` timeline, and a
 loaded local avatar. The upstream WebGL offscreen path corrupted AQW avatar

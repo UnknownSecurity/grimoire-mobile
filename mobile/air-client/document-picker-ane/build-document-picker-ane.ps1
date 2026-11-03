@@ -109,7 +109,8 @@ if ($LASTEXITCODE -ne 0) {
 & $adt -package -target ane $extensionOutput $extensionDescriptor `
     -swc $swcPath `
     -platform Android-ARM -C $platformRoot . `
-    -platform Android-ARM64 -C $platformRoot .
+    -platform Android-ARM64 -C $platformRoot . `
+    -platform Android-x86 -C $platformRoot .
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $extensionOutput -PathType Leaf)) {
     throw 'The document picker AIR native extension failed to package.'
 }
